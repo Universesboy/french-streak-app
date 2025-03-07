@@ -164,7 +164,10 @@ const StudyTimeSummary: React.FC<StudyTimeSummaryProps> = ({
   
   // Handle tab change
   const handleTabChange = (_event: React.SyntheticEvent, newValue: 'week' | 'month' | 'year') => {
-    setTimeRange(newValue);
+    // Ensure newValue is one of the allowed values
+    if (newValue === 'week' || newValue === 'month' || newValue === 'year') {
+      setTimeRange(newValue);
+    }
   };
   
   // Custom tooltip for the chart

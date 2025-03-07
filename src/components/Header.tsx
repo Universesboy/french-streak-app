@@ -4,49 +4,18 @@ import {
   Typography, 
   AppBar, 
   Toolbar,
-  Container,
   useTheme,
   useMediaQuery,
-  styled,
   IconButton,
-  Menu,
-  MenuItem,
-  Avatar,
   Button,
-  Chip
+  Chip,
+  Container,
+  Avatar
 } from '@mui/material';
-import TranslateIcon from '@mui/icons-material/Translate';
-import MenuIcon from '@mui/icons-material/Menu';
-import PersonIcon from '@mui/icons-material/Person';
-import SettingsIcon from '@mui/icons-material/Settings';
-import InfoIcon from '@mui/icons-material/Info';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import LoginIcon from '@mui/icons-material/Login';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
-
-const StyledAppBar = styled(AppBar)(({ theme }) => ({
-  background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-  boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
-}));
-
-const LogoBox = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  cursor: 'pointer',
-  transition: 'transform 0.2s',
-  '&:hover': {
-    transform: 'scale(1.05)',
-  },
-}));
-
-const UserAvatar = styled(Avatar)(({ theme }) => ({
-  backgroundColor: theme.palette.primary.dark,
-  cursor: 'pointer',
-  transition: 'transform 0.2s',
-  '&:hover': {
-    transform: 'scale(1.1)',
-  },
-}));
+import { motion } from 'framer-motion';
 
 interface HeaderProps {
   streakCount: number;
@@ -63,114 +32,184 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
+
+  // Animation variants
+  const logoVariants = {
+    hidden: { opacity: 0, y: -10 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { 
+        duration: 0.4 
+      }
+    }
   };
-  
-  const handleMenuClose = () => {
-    setAnchorEl(null);
+
+  const buttonVariants = {
+    hidden: { opacity: 0, y: -10 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { 
+        duration: 0.3, 
+        delay: 0.2 
+      }
+    }
   };
-  
+
+  const streakVariants = {
+    hidden: { scale: 0.8, opacity: 0 },
+    visible: { 
+      scale: 1, 
+      opacity: 1,
+      transition: { 
+        type: "spring",
+        stiffness: 300,
+        damping: 15,
+        delay: 0.1
+      }
+    }
+  };
+
   return (
     <AppBar 
-      position="static" 
-      color="primary" 
+      position="sticky" 
       elevation={0}
       sx={{ 
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        backdropFilter: 'blur(10px)',
         borderBottom: '1px solid',
-        borderColor: 'primary.dark',
-        backgroundColor: 'primary.main',
+        borderColor: 'divider',
       }}
     >
-      <Toolbar>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <LocalFireDepartmentIcon 
-            sx={{ 
-              mr: 1, 
-              color: 'secondary.main',
-              fontSize: { xs: 28, sm: 32 }
-            }} 
-          />
-          <Typography 
-            variant={isMobile ? "h6" : "h5"} 
-            component="h1" 
-            sx={{ 
-              fontWeight: 700,
-              color: 'white',
-              letterSpacing: '-0.5px'
-            }}
+      <Container maxWidth="lg">
+        <Toolbar sx={{ py: 1.5 }}>
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={logoVariants}
           >
-            French Streak
-          </Typography>
-        </Box>
-        
-        <Box sx={{ flexGrow: 1 }} />
-        
-        {streakCount > 0 && (
-          <Chip
-            icon={<LocalFireDepartmentIcon fontSize="small" />}
-            label={`${streakCount} day${streakCount !== 1 ? 's' : ''}`}
-            color="secondary"
-            sx={{ 
-              mr: 2,
-              fontWeight: 'bold',
-              '& .MuiChip-icon': { color: 'inherit' }
-            }}
-          />
-        )}
-        
-        {!isLoggedIn ? (
-          <>
-            {isMobile ? (
-              <>
-                <IconButton 
-                  color="inherit" 
-                  onClick={onLoginClick}
-                  sx={{ ml: 1 }}
-                >
-                  <LoginIcon />
-                </IconButton>
-                <IconButton 
-                  color="inherit" 
-                  onClick={onRegisterClick}
-                  sx={{ ml: 1 }}
-                >
-                  <PersonAddIcon />
-                </IconButton>
-              </>
-            ) : (
-              <>
-                <Button 
-                  color="inherit" 
-                  onClick={onLoginClick}
-                  startIcon={<LoginIcon />}
-                  sx={{ ml: 1 }}
-                >
-                  Log In
-                </Button>
-                <Button 
-                  variant="outlined" 
-                  color="inherit" 
-                  onClick={onRegisterClick}
-                  startIcon={<PersonAddIcon />}
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Avatar 
+                sx={{ 
+                  backgroundColor: theme.palette.primary.main,
+                  width: { xs: 40, sm: 48 },
+                  height: { xs: 40, sm: 48 },
+                  mr: 1.5
+                }}
+              >
+                <LocalFireDepartmentIcon 
                   sx={{ 
-                    ml: 1,
-                    borderColor: 'rgba(255, 255, 255, 0.5)',
-                    '&:hover': {
-                      borderColor: 'white',
-                      backgroundColor: 'rgba(255, 255, 255, 0.1)'
-                    }
+                    color: 'white',
+                    fontSize: { xs: 24, sm: 28 }
+                  }} 
+                />
+              </Avatar>
+              <Box>
+                <Typography 
+                  variant={isMobile ? "h6" : "h5"} 
+                  component="h1" 
+                  sx={{ 
+                    fontWeight: 700,
+                    color: theme.palette.primary.main,
+                    lineHeight: 1.2
                   }}
                 >
-                  Register
-                </Button>
-              </>
-            )}
-          </>
-        ) : null}
-      </Toolbar>
+                  French Streak
+                </Typography>
+                <Typography 
+                  variant="caption" 
+                  sx={{ 
+                    display: { xs: 'none', sm: 'block' },
+                    color: theme.palette.text.secondary
+                  }}
+                >
+                  Track your learning progress
+                </Typography>
+              </Box>
+            </Box>
+          </motion.div>
+          
+          <Box sx={{ flexGrow: 1 }} />
+          
+          {streakCount > 0 && (
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={streakVariants}
+            >
+              <Chip
+                avatar={<LocalFireDepartmentIcon style={{ color: '#FF6B6B' }} />}
+                label={`${streakCount} day${streakCount !== 1 ? 's' : ''}`}
+                sx={{ 
+                  mr: 2,
+                  fontWeight: 'bold',
+                  backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                  color: theme.palette.secondary.dark,
+                  border: '1px solid',
+                  borderColor: 'rgba(255, 107, 107, 0.3)',
+                  boxShadow: '0 2px 8px rgba(255, 107, 107, 0.15)',
+                  '& .MuiChip-avatar': { 
+                    backgroundColor: 'transparent' 
+                  }
+                }}
+              />
+            </motion.div>
+          )}
+          
+          {!isLoggedIn ? (
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={buttonVariants}
+            >
+              {isMobile ? (
+                <>
+                  <IconButton 
+                    onClick={onLoginClick}
+                    sx={{ 
+                      ml: 1,
+                      color: theme.palette.primary.main
+                    }}
+                  >
+                    <LoginIcon />
+                  </IconButton>
+                  <IconButton 
+                    onClick={onRegisterClick}
+                    sx={{ 
+                      ml: 1,
+                      color: theme.palette.secondary.main
+                    }}
+                  >
+                    <PersonAddIcon />
+                  </IconButton>
+                </>
+              ) : (
+                <>
+                  <Button 
+                    variant="outlined"
+                    color="primary" 
+                    onClick={onLoginClick}
+                    startIcon={<LoginIcon />}
+                    sx={{ ml: 1 }}
+                  >
+                    Log In
+                  </Button>
+                  <Button 
+                    variant="contained" 
+                    color="primary" 
+                    onClick={onRegisterClick}
+                    startIcon={<PersonAddIcon />}
+                    sx={{ ml: 2 }}
+                  >
+                    Sign Up
+                  </Button>
+                </>
+              )}
+            </motion.div>
+          ) : null}
+        </Toolbar>
+      </Container>
     </AppBar>
   );
 };

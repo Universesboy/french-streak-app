@@ -78,6 +78,12 @@ export const logoutUser = async () => {
 
 // Firestore data functions
 export const saveUserStreakData = async (userId: string, streakData: any) => {
+  // Don't attempt to save if userId is undefined
+  if (!userId) {
+    console.log('No user ID provided, skipping Firebase save');
+    return { error: null };
+  }
+  
   try {
     await updateDoc(doc(db, "users", userId), {
       streakData,
@@ -85,11 +91,18 @@ export const saveUserStreakData = async (userId: string, streakData: any) => {
     });
     return { error: null };
   } catch (error) {
+    console.error('Error saving to Firebase:', error);
     return { error };
   }
 };
 
 export const getUserStreakData = async (userId: string) => {
+  // Don't attempt to fetch if userId is undefined
+  if (!userId) {
+    console.log('No user ID provided, skipping Firebase fetch');
+    return { data: null, error: null };
+  }
+  
   try {
     const docSnap = await getDoc(doc(db, "users", userId));
     if (docSnap.exists()) {
@@ -98,6 +111,7 @@ export const getUserStreakData = async (userId: string) => {
       return { data: null, error: "No user data found" };
     }
   } catch (error) {
+    console.error('Error fetching from Firebase:', error);
     return { data: null, error };
   }
 };

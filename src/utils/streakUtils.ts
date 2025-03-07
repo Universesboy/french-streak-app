@@ -216,9 +216,12 @@ export const endStudySession = (data: StreakData): StreakData => {
     duration: durationInSeconds > 0 ? durationInSeconds : 0 // Ensure positive duration
   };
   
+  // Ensure studySessions is an array before spreading
+  const safeStudySessions = Array.isArray(data.studySessions) ? data.studySessions : [];
+  
   return {
     ...data,
-    studySessions: [...data.studySessions, completedSession],
+    studySessions: [...safeStudySessions, completedSession],
     ongoingSession: null
   };
 };
