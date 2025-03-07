@@ -180,6 +180,7 @@ export const startStudySession = (data: StreakData): StreakData => {
   const now = new Date();
   const today = getFormattedDate(now);
   
+  // Create new session with ISO string dates for consistent formatting
   const newSession: StudySession = {
     startTime: now.toISOString(),
     endTime: null,
@@ -201,13 +202,18 @@ export const endStudySession = (data: StreakData): StreakData => {
   }
   
   const now = new Date();
+  // Make sure we properly convert the string to a Date object
   const startTime = new Date(data.ongoingSession.startTime);
-  const durationInSeconds = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+  
+  // Calculate duration - ensure we have valid dates
+  const durationInSeconds = startTime.getTime() && now.getTime() 
+    ? Math.floor((now.getTime() - startTime.getTime()) / 1000) 
+    : 0;
   
   const completedSession: StudySession = {
     ...data.ongoingSession,
     endTime: now.toISOString(),
-    duration: durationInSeconds
+    duration: durationInSeconds > 0 ? durationInSeconds : 0 // Ensure positive duration
   };
   
   return {

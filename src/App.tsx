@@ -157,11 +157,26 @@ function AppContent() {
   useEffect(() => {
     const loadData = async () => {
       try {
+        // Initialize with default empty values
+        const initialData: StreakData = {
+          currentStreak: 0,
+          lastCheckInDate: null,
+          totalReward: 0,
+          studyDays: [],
+          longestStreak: 0,
+          totalDaysStudied: 0,
+          studySessions: [],
+          ongoingSession: null
+        };
+        
+        // Try to load data from Firebase or localStorage
         const data = await initStreakData(currentUser?.uid);
-        setStreakData(data);
+        
+        // Make sure we're not setting undefined or null values
+        setStreakData(data || initialData);
         
         // Check if there's an active session
-        if (data.ongoingSession) {
+        if (data?.ongoingSession) {
           setNotification({
             open: true,
             message: 'You have an active study session in progress.',
@@ -212,47 +227,74 @@ function AppContent() {
   
   // Handle study timer start
   const handleTimerStart = async () => {
-    const updatedData = startStudySession(streakData);
-    setStreakData(updatedData);
-    await saveStreakData(updatedData, currentUser?.uid);
-    
-    setNotification({
-      open: true,
-      message: 'Study timer started! Your study time is now being tracked.',
-      severity: 'info'
-    });
+    console.log('Starting timer...');
+    try {
+      const updatedData = startStudySession(streakData);
+      console.log('Session started:', updatedData.ongoingSession);
+      setStreakData(updatedData);
+      await saveStreakData(updatedData, currentUser?.uid);
+      
+      setNotification({
+        open: true,
+        message: 'Study timer started! Your study time is now being tracked.',
+        severity: 'info'
+      });
+    } catch (error) {
+      console.error('Error starting timer:', error);
+      setNotification({
+        open: true,
+        message: 'Failed to start timer. Please try again.',
+        severity: 'error'
+      });
+    }
   };
   
   // Handle study timer stop
   const handleTimerStop = async () => {
-    const updatedData = endStudySession(streakData);
-    setStreakData(updatedData);
-    await saveStreakData(updatedData, currentUser?.uid);
-    
-    // Calculate the duration of the session that just ended
-    let lastSessionDuration = 0;
-    if (updatedData.studySessions.length > 0) {
-      const lastSession = updatedData.studySessions[updatedData.studySessions.length - 1];
-      lastSessionDuration = lastSession.duration;
+    console.log('Stopping timer...');
+    try {
+      if (!streakData.ongoingSession) {
+        console.warn('No ongoing session to stop');
+        return;
+      }
+      
+      const updatedData = endStudySession(streakData);
+      console.log('Session ended:', updatedData.studySessions[updatedData.studySessions.length - 1]);
+      setStreakData(updatedData);
+      await saveStreakData(updatedData, currentUser?.uid);
+      
+      // Calculate the duration of the session that just ended
+      let lastSessionDuration = 0;
+      if (updatedData.studySessions.length > 0) {
+        const lastSession = updatedData.studySessions[updatedData.studySessions.length - 1];
+        lastSessionDuration = lastSession.duration;
+      }
+      
+      // Format minutes and seconds for display
+      const minutes = Math.floor(lastSessionDuration / 60);
+      const seconds = lastSessionDuration % 60;
+      
+      // Create a message with proper pluralization
+      const minuteText = minutes === 1 ? 'minute' : 'minutes';
+      const secondText = seconds === 1 ? 'second' : 'seconds';
+      
+      const message = minutes > 0 
+        ? `Study session ended! You studied for ${minutes} ${minuteText} and ${seconds} ${secondText}.`
+        : `Study session ended! You studied for ${seconds} ${secondText}.`;
+      
+      setNotification({
+        open: true,
+        message,
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error stopping timer:', error);
+      setNotification({
+        open: true,
+        message: 'Failed to stop timer. Please try again.',
+        severity: 'error'
+      });
     }
-    
-    // Format minutes and seconds for display
-    const minutes = Math.floor(lastSessionDuration / 60);
-    const seconds = lastSessionDuration % 60;
-    
-    // Create a message with proper pluralization
-    const minuteText = minutes === 1 ? 'minute' : 'minutes';
-    const secondText = seconds === 1 ? 'second' : 'seconds';
-    
-    const message = minutes > 0 
-      ? `Study session ended! You studied for ${minutes} ${minuteText} and ${seconds} ${secondText}.`
-      : `Study session ended! You studied for ${seconds} ${secondText}.`;
-    
-    setNotification({
-      open: true,
-      message,
-      severity: 'success'
-    });
   };
   
   // Handle closing the notification
@@ -389,7 +431,7 @@ function AppContent() {
                   onStart={handleTimerStart}
                   onStop={handleTimerStop}
                   isRunning={!!streakData.ongoingSession}
-                  startTime={streakData.ongoingSession ? new Date(streakData.ongoingSession.startTime) : null}
+                  startTime={streakData.ongoingSession?.startTime ? new Date(streakData.ongoingSession.startTime) : null}
                 />
               </Box>
             </Slide>

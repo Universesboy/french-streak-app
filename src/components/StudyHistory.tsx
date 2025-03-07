@@ -25,10 +25,17 @@ interface StudyHistoryProps {
   studySessions: StudySession[];
 }
 
-const StudyHistory: React.FC<StudyHistoryProps> = ({ studyDays, studySessions }) => {
+const StudyHistory: React.FC<StudyHistoryProps> = ({ 
+  studyDays = [], 
+  studySessions = [] 
+}) => {
   const theme = useTheme();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [tabValue, setTabValue] = useState(0);
+  
+  // Ensure we have arrays, not null or undefined
+  const safeStudyDays = studyDays || [];
+  const safeStudySessions = studySessions || [];
   
   // Get days in the current month
   const daysInMonth = eachDayOfInterval({
@@ -55,7 +62,7 @@ const StudyHistory: React.FC<StudyHistoryProps> = ({ studyDays, studySessions })
   };
   
   // Get study sessions for the current month
-  const monthSessions = studySessions.filter(session => {
+  const monthSessions = safeStudySessions.filter(session => {
     const sessionDate = new Date(session.date);
     return (
       getMonth(sessionDate) === getMonth(currentMonth) &&
@@ -82,7 +89,7 @@ const StudyHistory: React.FC<StudyHistoryProps> = ({ studyDays, studySessions })
   
   // Get study sessions for a specific day
   const getSessionsForDay = (day: Date) => {
-    return studySessions.filter(session => {
+    return safeStudySessions.filter(session => {
       const sessionDate = new Date(session.date);
       return isSameDay(sessionDate, day);
     });
@@ -90,10 +97,10 @@ const StudyHistory: React.FC<StudyHistoryProps> = ({ studyDays, studySessions })
   
   // Calculate streak lengths
   const calculateStreakLengths = () => {
-    if (studyDays.length === 0) return [];
+    if (safeStudyDays.length === 0) return [];
     
     // Sort study days chronologically
-    const sortedDays = [...studyDays].sort((a, b) => {
+    const sortedDays = [...safeStudyDays].sort((a, b) => {
       return new Date(a).getTime() - new Date(b).getTime();
     });
     
@@ -247,7 +254,7 @@ const StudyHistory: React.FC<StudyHistoryProps> = ({ studyDays, studySessions })
             {/* Calendar days */}
             {daysInMonth.map((day, index) => {
               const formattedDay = format(day, 'yyyy-MM-dd');
-              const isStudyDay = studyDays.includes(formattedDay);
+              const isStudyDay = safeStudyDays.includes(formattedDay);
               const daySessions = getSessionsForDay(day);
               const totalDayTime = daySessions.reduce((total, session) => {
                 return total + session.duration;
@@ -340,13 +347,13 @@ const StudyHistory: React.FC<StudyHistoryProps> = ({ studyDays, studySessions })
       {/* Sessions View */}
       {tabValue === 2 && (
         <Box>
-          {studySessions.length > 0 ? (
+          {safeStudySessions.length > 0 ? (
             <>
               <Typography variant="subtitle1" gutterBottom>
                 Your Study Sessions
               </Typography>
               
-              {studySessions
+              {safeStudySessions
                 .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                 .map((session, index) => (
                   <Box 
