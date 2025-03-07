@@ -1,103 +1,135 @@
 import React from 'react';
 import { 
-  Card, 
-  CardContent, 
+  Paper, 
+  Box, 
   Typography, 
-  Box,
-  LinearProgress,
-  Divider,
-  styled
+  Grid,
+  useTheme
 } from '@mui/material';
+import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
-import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
-import { calculateDailyReward } from '../utils/streakUtils';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 
 interface StreakCardProps {
   currentStreak: number;
+  longestStreak: number;
+  totalDaysStudied: number;
   totalReward: number;
 }
 
-const StyledCard = styled(Card)(({ theme }) => ({
-  maxWidth: 600,
-  margin: '0 auto',
-  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
-  borderRadius: 16,
-  overflow: 'visible',
-}));
-
-const StreakProgress = styled(LinearProgress)(({ theme }) => ({
-  height: 10,
-  borderRadius: 5,
-  marginTop: 8,
-  marginBottom: 8,
-}));
-
-const IconWrapper = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  marginBottom: 8,
-  '& svg': {
-    marginRight: 8,
-    color: '#FFD700', // Gold color for the icons
-  }
-}));
-
-const StreakCard: React.FC<StreakCardProps> = ({ currentStreak, totalReward }) => {
-  // Calculate progress to the next reward level
-  const daysToNextLevel = currentStreak % 2 === 0 ? 2 : 1;
-  const progressToNextLevel = (currentStreak % 2) * 50; // 0% or 50%
+const StreakCard: React.FC<StreakCardProps> = ({ 
+  currentStreak, 
+  longestStreak, 
+  totalDaysStudied, 
+  totalReward 
+}) => {
+  const theme = useTheme();
   
-  // Get the current reward per day
-  const currentDailyReward = calculateDailyReward(currentStreak);
+  const stats = [
+    {
+      label: 'Current Streak',
+      value: currentStreak,
+      icon: <LocalFireDepartmentIcon sx={{ color: theme.palette.secondary.main }} />,
+      suffix: currentStreak === 1 ? 'day' : 'days'
+    },
+    {
+      label: 'Longest Streak',
+      value: longestStreak,
+      icon: <EmojiEventsIcon sx={{ color: theme.palette.secondary.dark }} />,
+      suffix: longestStreak === 1 ? 'day' : 'days'
+    },
+    {
+      label: 'Total Days',
+      value: totalDaysStudied,
+      icon: <CalendarMonthIcon sx={{ color: theme.palette.primary.main }} />,
+      suffix: totalDaysStudied === 1 ? 'day' : 'days'
+    },
+    {
+      label: 'Total Reward',
+      value: totalReward,
+      icon: <AttachMoneyIcon sx={{ color: theme.palette.success.main }} />,
+      prefix: '$'
+    }
+  ];
   
-  // Calculate the next milestone
-  const nextMilestone = currentStreak % 2 === 0 ? currentStreak + 2 : currentStreak + 1;
-  const nextReward = calculateDailyReward(nextMilestone);
-
   return (
-    <StyledCard>
-      <CardContent>
-        <IconWrapper>
-          <EmojiEventsIcon fontSize="large" />
-          <Typography variant="h4" component="div">
-            {currentStreak} Day Streak
-          </Typography>
-        </IconWrapper>
-
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            {currentStreak % 2 === 0 ? 
-              'You completed a reward level!' : 
-              `${daysToNextLevel} day${daysToNextLevel > 1 ? 's' : ''} until next reward increase`}
-          </Typography>
-          <StreakProgress 
-            variant="determinate" 
-            value={progressToNextLevel} 
-            color="secondary"
-          />
-        </Box>
-
-        <Divider sx={{ my: 2 }} />
-
-        <IconWrapper>
-          <MonetizationOnIcon fontSize="large" />
-          <Typography variant="h5" component="div">
-            ${totalReward.toFixed(2)} Earned
-          </Typography>
-        </IconWrapper>
-
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="body1">
-            Current reward: ${currentDailyReward}/day
-          </Typography>
-          {currentStreak % 2 !== 0 && (
-            <Typography variant="body2" color="text.secondary">
-              Next level: ${nextReward}/day after {daysToNextLevel} more day{daysToNextLevel > 1 ? 's' : ''}
-            </Typography>
-          )}
-        </Box>
-      </CardContent>
-    </StyledCard>
+    <Paper 
+      elevation={2} 
+      sx={{ 
+        p: 3, 
+        borderRadius: 3,
+        backgroundColor: theme.palette.background.paper
+      }}
+    >
+      <Typography 
+        variant="h5" 
+        component="h2" 
+        gutterBottom 
+        sx={{ 
+          fontWeight: 'bold',
+          textAlign: 'center',
+          mb: 3
+        }}
+      >
+        Your French Learning Stats
+      </Typography>
+      
+      <Grid container spacing={3}>
+        {stats.map((stat, index) => (
+          <Grid item xs={6} sm={3} key={index}>
+            <Box 
+              sx={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center',
+                textAlign: 'center'
+              }}
+            >
+              <Box 
+                sx={{ 
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mb: 1
+                }}
+              >
+                {stat.icon}
+                <Typography 
+                  variant="h5" 
+                  component="div" 
+                  sx={{ 
+                    fontWeight: 'bold',
+                    ml: 0.5
+                  }}
+                >
+                  {stat.prefix}{stat.value}
+                </Typography>
+                {stat.suffix && (
+                  <Typography 
+                    variant="body2" 
+                    component="span" 
+                    sx={{ 
+                      ml: 0.5,
+                      alignSelf: 'flex-end',
+                      mb: 0.5
+                    }}
+                  >
+                    {stat.suffix}
+                  </Typography>
+                )}
+              </Box>
+              <Typography 
+                variant="body2" 
+                color="text.secondary"
+              >
+                {stat.label}
+              </Typography>
+            </Box>
+          </Grid>
+        ))}
+      </Grid>
+    </Paper>
   );
 };
 

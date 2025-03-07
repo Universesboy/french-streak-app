@@ -1,508 +1,316 @@
 import React, { useState } from 'react';
-import {
-  Box,
-  Typography,
-  Paper,
-  Tabs,
-  Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Card,
-  CardContent,
-  Grid,
-  Divider,
-  styled,
-  useTheme,
-  useMediaQuery,
-  Collapse,
-  IconButton,
-  Chip
-} from '@mui/material';
-import {
-  TimelapseTwoTone as TimerIcon,
-  CalendarToday as CalendarIcon,
-  ViewWeek as WeekIcon,
-  DateRange as MonthIcon,
-  Timeline as YearIcon,
-  ExpandMore as ExpandMoreIcon
-} from '@mui/icons-material';
-import { format } from 'date-fns';
 import { 
-  formatTime, 
-  getDailyStudyTimeSummary, 
-  getWeeklyStudyTimeSummary, 
-  getMonthlyStudyTimeSummary, 
-  getYearlyStudyTimeSummary,
-  getRecentStudySummary
-} from '../utils/streakUtils';
-import type { StreakData } from '../utils/streakUtils';
+  Paper, 
+  Typography, 
+  Box, 
+  Tabs, 
+  Tab, 
+  useTheme,
+  Grid
+} from '@mui/material';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  Cell
+} from 'recharts';
+import { 
+  format, 
+  startOfWeek, 
+  endOfWeek, 
+  eachDayOfInterval,
+  getWeek,
+  getMonth,
+  getYear,
+  startOfMonth,
+  endOfMonth,
+  isSameDay
+} from 'date-fns';
+import { StudySession, formatTime } from '../utils/streakUtils';
 
 interface StudyTimeSummaryProps {
-  streakData: StreakData;
+  studySessions: StudySession[];
+  ongoingSession: StudySession | null;
 }
 
-const SummaryCard = styled(Card)(({ theme }) => ({
-  height: '100%',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-  borderRadius: 16,
-  transition: 'transform 0.2s',
-  '&:hover': {
-    transform: 'translateY(-4px)',
-  },
-}));
-
-const ExpandMore = styled(IconButton)<{ expanded: boolean }>(({ theme, expanded }) => ({
-  transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-  marginLeft: 'auto',
-  transition: theme.transitions.create('transform', {
-    duration: theme.transitions.duration.shortest,
-  }),
-}));
-
-const StudyTimeSummary: React.FC<StudyTimeSummaryProps> = ({ streakData }) => {
+const StudyTimeSummary: React.FC<StudyTimeSummaryProps> = ({ 
+  studySessions = [],
+  ongoingSession = null
+}) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [tabValue, setTabValue] = useState(0);
-  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({ today: true });
+  const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('week');
   
-  // Get summary data
-  const recentSummary = getRecentStudySummary(streakData);
-  const dailySummary = getDailyStudyTimeSummary(streakData.studySessions);
-  const weeklySummary = getWeeklyStudyTimeSummary(streakData.studySessions);
-  const monthlySummary = getMonthlyStudyTimeSummary(streakData.studySessions);
-  const yearlySummary = getYearlyStudyTimeSummary(streakData.studySessions);
+  // Get all sessions including ongoing, with safety check
+  const allSessions = ongoingSession 
+    ? [...(studySessions || []), ongoingSession]
+    : (studySessions || []);
   
-  // Handle tab change
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+  // Calculate total study time
+  const totalStudyTime = allSessions.reduce((total, session) => {
+    return total + session.duration;
+  }, 0);
+  
+  // Get data for the current week
+  const getWeekData = () => {
+    const today = new Date();
+    const weekStart = startOfWeek(today, { weekStartsOn: 0 }); // Sunday as first day
+    const weekEnd = endOfWeek(today, { weekStartsOn: 0 });
+    const daysOfWeek = eachDayOfInterval({ start: weekStart, end: weekEnd });
+    
+    return daysOfWeek.map(day => {
+      const dayStr = format(day, 'yyyy-MM-dd');
+      const daySessions = allSessions.filter(session => session.date === dayStr);
+      const totalTime = daySessions.reduce((total, session) => total + session.duration, 0);
+      
+      return {
+        name: format(day, 'EEE'),
+        fullDate: format(day, 'MMM d'),
+        time: Math.round(totalTime / 60), // Convert to minutes
+        isToday: isSameDay(day, today)
+      };
+    });
   };
   
-  // Toggle expanding a card
-  const toggleExpandCard = (cardId: string) => {
-    setExpandedCards(prev => ({
-      ...prev,
-      [cardId]: !prev[cardId]
+  // Get data for the current month
+  const getMonthData = () => {
+    const today = new Date();
+    const monthStart = startOfMonth(today);
+    const monthEnd = endOfMonth(today);
+    const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+    
+    // Group by week
+    const weekData: { [key: string]: number } = {};
+    
+    daysInMonth.forEach(day => {
+      const weekNum = getWeek(day);
+      const weekKey = `Week ${weekNum}`;
+      const dayStr = format(day, 'yyyy-MM-dd');
+      const daySessions = allSessions.filter(session => session.date === dayStr);
+      const dayTime = daySessions.reduce((total, session) => total + session.duration, 0);
+      
+      if (!weekData[weekKey]) {
+        weekData[weekKey] = 0;
+      }
+      
+      weekData[weekKey] += dayTime;
+    });
+    
+    return Object.entries(weekData).map(([name, time]) => ({
+      name,
+      time: Math.round(time / 60), // Convert to minutes
+      isToday: false
     }));
   };
   
-  // Format daily date for display
-  const formatDailyDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return format(date, isMobile ? 'MMM d, yyyy' : 'MMMM d, yyyy (EEEE)');
-  };
-  
-  // Format week for display
-  const formatWeek = (weekKey: string) => {
-    const [year, week] = weekKey.split('-W');
-    return `Week ${week}, ${year}`;
-  };
-  
-  // Format month for display
-  const formatMonth = (monthKey: string) => {
-    const [year, month] = monthKey.split('-');
-    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-    return format(date, 'MMMM yyyy');
-  };
-  
-  // Convert summary object to array for table display
-  const getSummaryArray = (summary: Record<string, number>, formatFn?: (key: string) => string) => {
-    return Object.entries(summary)
-      .map(([key, duration]) => ({
-        key,
-        label: formatFn ? formatFn(key) : key,
-        duration
-      }))
-      .sort((a, b) => b.key.localeCompare(a.key)); // Sort newest first
-  };
-  
-  // Render a mobile summary card
-  const renderMobileSummaryCard = (
-    title: string, 
-    cardId: string, 
-    icon: React.ReactNode,
-    data: Array<{ key: string, label: string, duration: number }>,
-    color: string
-  ) => {
-    const isExpanded = expandedCards[cardId] || false;
+  // Get data for the current year
+  const getYearData = () => {
+    const today = new Date();
+    const currentYear = getYear(today);
     
-    return (
-      <Card sx={{ mb: 2, borderRadius: 2, overflow: 'visible' }}>
-        <CardContent sx={{ p: 2, pb: isExpanded ? 1 : 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Box sx={{ mr: 1.5, color }}>{icon}</Box>
-            <Typography variant="subtitle1" fontWeight="bold">{title}</Typography>
-            <ExpandMore
-              expanded={isExpanded}
-              onClick={() => toggleExpandCard(cardId)}
-              aria-expanded={isExpanded}
-              aria-label="show more"
-              size="small"
-            >
-              <ExpandMoreIcon />
-            </ExpandMore>
-          </Box>
-          
-          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-            <Box sx={{ mt: 2 }}>
-              {data.length > 0 ? (
-                <Box>
-                  {data.slice(0, 5).map((item) => (
-                    <Box key={item.key} sx={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      py: 1,
-                      borderBottom: 1,
-                      borderColor: 'divider'
-                    }}>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {item.label}
-                      </Typography>
-                      <Chip 
-                        label={formatTime(item.duration)} 
-                        size="small" 
-                        color="primary" 
-                        variant="outlined"
-                        sx={{ fontWeight: 600 }}
-                      />
-                    </Box>
-                  ))}
-                  
-                  {data.length > 5 && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
-                      + {data.length - 5} more entries
-                    </Typography>
-                  )}
-                </Box>
-              ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
-                  No data available yet
-                </Typography>
-              )}
-            </Box>
-          </Collapse>
-        </CardContent>
-      </Card>
-    );
+    // Group by month
+    const monthData: { [key: string]: number } = {};
+    
+    // Initialize all months
+    for (let i = 0; i < 12; i++) {
+      const monthName = format(new Date(currentYear, i, 1), 'MMM');
+      monthData[monthName] = 0;
+    }
+    
+    // Fill in data
+    allSessions.forEach(session => {
+      const sessionDate = new Date(session.date);
+      if (getYear(sessionDate) === currentYear) {
+        const monthName = format(sessionDate, 'MMM');
+        monthData[monthName] += session.duration;
+      }
+    });
+    
+    return Object.entries(monthData).map(([name, time]) => ({
+      name,
+      time: Math.round(time / 60), // Convert to minutes
+      isToday: false
+    }));
   };
   
-  // Render the current tab content
-  const renderTabContent = () => {
-    if (!recentSummary) {
+  // Get chart data based on selected time range
+  const getChartData = () => {
+    switch (timeRange) {
+      case 'week':
+        return getWeekData();
+      case 'month':
+        return getMonthData();
+      case 'year':
+        return getYearData();
+      default:
+        return getWeekData();
+    }
+  };
+  
+  const chartData = getChartData();
+  
+  // Calculate average study time per day/week/month
+  const calculateAverage = () => {
+    if (chartData.length === 0) return 0;
+    
+    const totalTime = chartData.reduce((sum, item) => sum + item.time, 0);
+    return Math.round(totalTime / chartData.length);
+  };
+  
+  const averageTime = calculateAverage();
+  
+  // Handle tab change
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: 'week' | 'month' | 'year') => {
+    setTimeRange(newValue);
+  };
+  
+  // Custom tooltip for the chart
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
       return (
-        <Box sx={{ py: 4, textAlign: 'center' }}>
-          <Typography variant="body1" color="text.secondary">
-            No study sessions recorded yet. Start tracking your study time to see summaries here!
+        <Box
+          sx={{
+            backgroundColor: 'background.paper',
+            p: 1.5,
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 1,
+            boxShadow: 1
+          }}
+        >
+          <Typography variant="subtitle2">{label}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {payload[0].payload.fullDate && `${payload[0].payload.fullDate}: `}
+            {payload[0].value} minutes
           </Typography>
         </Box>
       );
     }
     
-    // For mobile devices, use cards with collapsible sections
-    if (isMobile) {
-      const summaryData = [
-        {
-          title: 'Daily Summary',
-          cardId: 'daily',
-          icon: <CalendarIcon />,
-          data: getSummaryArray(dailySummary, formatDailyDate),
-          color: theme.palette.primary.main
-        },
-        {
-          title: 'Weekly Summary',
-          cardId: 'weekly',
-          icon: <WeekIcon />,
-          data: getSummaryArray(weeklySummary, formatWeek),
-          color: theme.palette.info.main
-        },
-        {
-          title: 'Monthly Summary',
-          cardId: 'monthly',
-          icon: <MonthIcon />,
-          data: getSummaryArray(monthlySummary, formatMonth),
-          color: theme.palette.secondary.main
-        },
-        {
-          title: 'Yearly Summary',
-          cardId: 'yearly',
-          icon: <YearIcon />,
-          data: getSummaryArray(yearlySummary),
-          color: theme.palette.success.main
-        }
-      ];
-      
-      const currentSummaryData = summaryData[tabValue];
-      
-      return (
-        <Box>
-          {renderMobileSummaryCard(
-            currentSummaryData.title,
-            currentSummaryData.cardId,
-            currentSummaryData.icon,
-            currentSummaryData.data,
-            currentSummaryData.color
-          )}
-        </Box>
-      );
-    }
-    
-    // Desktop tables
-    switch (tabValue) {
-      case 0: // Daily
-        return (
-          <TableContainer component={Paper} elevation={0} sx={{ mt: 2 }}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell align="right">Time Studied</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {getSummaryArray(dailySummary, formatDailyDate).map((day) => (
-                  <TableRow key={day.key}>
-                    <TableCell component="th" scope="row">
-                      {day.label}
-                    </TableCell>
-                    <TableCell align="right">{formatTime(day.duration)}</TableCell>
-                  </TableRow>
-                ))}
-                {Object.keys(dailySummary).length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={2} align="center">
-                      No daily data available yet
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        );
-        
-      case 1: // Weekly
-        return (
-          <TableContainer component={Paper} elevation={0} sx={{ mt: 2 }}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Week</TableCell>
-                  <TableCell align="right">Time Studied</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {getSummaryArray(weeklySummary, formatWeek).map((week) => (
-                  <TableRow key={week.key}>
-                    <TableCell component="th" scope="row">
-                      {week.label}
-                    </TableCell>
-                    <TableCell align="right">{formatTime(week.duration)}</TableCell>
-                  </TableRow>
-                ))}
-                {Object.keys(weeklySummary).length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={2} align="center">
-                      No weekly data available yet
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        );
-        
-      case 2: // Monthly
-        return (
-          <TableContainer component={Paper} elevation={0} sx={{ mt: 2 }}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Month</TableCell>
-                  <TableCell align="right">Time Studied</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {getSummaryArray(monthlySummary, formatMonth).map((month) => (
-                  <TableRow key={month.key}>
-                    <TableCell component="th" scope="row">
-                      {month.label}
-                    </TableCell>
-                    <TableCell align="right">{formatTime(month.duration)}</TableCell>
-                  </TableRow>
-                ))}
-                {Object.keys(monthlySummary).length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={2} align="center">
-                      No monthly data available yet
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        );
-        
-      case 3: // Yearly
-        return (
-          <TableContainer component={Paper} elevation={0} sx={{ mt: 2 }}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Year</TableCell>
-                  <TableCell align="right">Time Studied</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {getSummaryArray(yearlySummary).map((year) => (
-                  <TableRow key={year.key}>
-                    <TableCell component="th" scope="row">
-                      {year.key}
-                    </TableCell>
-                    <TableCell align="right">{formatTime(year.duration)}</TableCell>
-                  </TableRow>
-                ))}
-                {Object.keys(yearlySummary).length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={2} align="center">
-                      No yearly data available yet
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        );
-        
-      default:
-        return null;
-    }
+    return null;
   };
   
   return (
-    <Box sx={{ mt: 4 }}>
-      <Typography variant="h5" component="h2" sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        mb: 3,
-        fontWeight: 'bold'
-      }}>
-        <TimerIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
+    <Paper 
+      elevation={2} 
+      sx={{ 
+        p: 3, 
+        borderRadius: 3,
+        backgroundColor: theme.palette.background.paper
+      }}
+    >
+      <Typography 
+        variant="h5" 
+        component="h2" 
+        gutterBottom 
+        sx={{ 
+          fontWeight: 'bold',
+          textAlign: 'center',
+          mb: 3
+        }}
+      >
         Study Time Summary
       </Typography>
       
-      {recentSummary && (
-        <Grid container spacing={isMobile ? 1 : 2} sx={{ mb: 4 }}>
-          <Grid item xs={6} sm={6} md={3}>
-            <SummaryCard>
-              <CardContent sx={{ textAlign: 'center', p: isMobile ? 1.5 : 3 }}>
-                <CalendarIcon sx={{ fontSize: isMobile ? 28 : 36, color: theme.palette.primary.main, mb: 1 }} />
-                <Typography variant={isMobile ? "h6" : "h5"} sx={{ fontWeight: 'bold' }}>
-                  {formatTime(recentSummary.today.totalTime).split(':').slice(0, 2).join(':')}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Today
-                </Typography>
-              </CardContent>
-            </SummaryCard>
-          </Grid>
-          
-          <Grid item xs={6} sm={6} md={3}>
-            <SummaryCard>
-              <CardContent sx={{ textAlign: 'center', p: isMobile ? 1.5 : 3 }}>
-                <WeekIcon sx={{ fontSize: isMobile ? 28 : 36, color: theme.palette.info.main, mb: 1 }} />
-                <Typography variant={isMobile ? "h6" : "h5"} sx={{ fontWeight: 'bold' }}>
-                  {formatTime(recentSummary.thisWeek.totalTime).split(':').slice(0, 2).join(':')}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  This Week
-                </Typography>
-              </CardContent>
-            </SummaryCard>
-          </Grid>
-          
-          <Grid item xs={6} sm={6} md={3}>
-            <SummaryCard>
-              <CardContent sx={{ textAlign: 'center', p: isMobile ? 1.5 : 3 }}>
-                <MonthIcon sx={{ fontSize: isMobile ? 28 : 36, color: theme.palette.secondary.main, mb: 1 }} />
-                <Typography variant={isMobile ? "h6" : "h5"} sx={{ fontWeight: 'bold' }}>
-                  {formatTime(recentSummary.thisMonth.totalTime).split(':').slice(0, 2).join(':')}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  This Month
-                </Typography>
-              </CardContent>
-            </SummaryCard>
-          </Grid>
-          
-          <Grid item xs={6} sm={6} md={3}>
-            <SummaryCard>
-              <CardContent sx={{ textAlign: 'center', p: isMobile ? 1.5 : 3 }}>
-                <YearIcon sx={{ fontSize: isMobile ? 28 : 36, color: theme.palette.success.main, mb: 1 }} />
-                <Typography variant={isMobile ? "h6" : "h5"} sx={{ fontWeight: 'bold' }}>
-                  {formatTime(recentSummary.thisYear.totalTime).split(':').slice(0, 2).join(':')}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  This Year
-                </Typography>
-              </CardContent>
-            </SummaryCard>
-          </Grid>
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={6}>
+          <Box 
+            sx={{ 
+              textAlign: 'center',
+              p: 2,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'divider'
+            }}
+          >
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              Total Study Time
+            </Typography>
+            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+              {formatTime(totalStudyTime)}
+            </Typography>
+          </Box>
         </Grid>
-      )}
+        
+        <Grid item xs={12} sm={6}>
+          <Box 
+            sx={{ 
+              textAlign: 'center',
+              p: 2,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'divider'
+            }}
+          >
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              Average {timeRange === 'week' ? 'Daily' : timeRange === 'month' ? 'Weekly' : 'Monthly'}
+            </Typography>
+            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+              {averageTime} min
+            </Typography>
+          </Box>
+        </Grid>
+      </Grid>
       
-      <Paper 
-        elevation={0}
-        sx={{ 
-          p: isMobile ? 1.5 : 3, 
-          borderRadius: 4,
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-          backgroundColor: '#fff',
-        }}
+      <Tabs 
+        value={timeRange} 
+        onChange={handleTabChange} 
+        centered
+        sx={{ mb: 3 }}
       >
-        <Tabs 
-          value={tabValue} 
-          onChange={handleTabChange}
-          indicatorColor="primary"
-          textColor="primary"
-          variant={isMobile ? "fullWidth" : "standard"}
-          aria-label="study summary tabs"
-          sx={{
-            '& .MuiTab-root': {
-              minWidth: isMobile ? 'auto' : 100,
-              fontSize: isMobile ? '0.8rem' : '0.9rem',
-              padding: isMobile ? '10px 4px' : undefined,
-            }
-          }}
-        >
-          <Tab 
-            label="Daily" 
-            icon={isMobile ? <CalendarIcon /> : undefined} 
-            iconPosition="start" 
-          />
-          <Tab 
-            label="Weekly" 
-            icon={isMobile ? <WeekIcon /> : undefined} 
-            iconPosition="start" 
-          />
-          <Tab 
-            label="Monthly" 
-            icon={isMobile ? <MonthIcon /> : undefined} 
-            iconPosition="start" 
-          />
-          <Tab 
-            label="Yearly" 
-            icon={isMobile ? <YearIcon /> : undefined} 
-            iconPosition="start" 
-          />
-        </Tabs>
-        
-        <Divider sx={{ mb: 2 }} />
-        
-        {renderTabContent()}
-      </Paper>
-    </Box>
+        <Tab label="Week" value="week" />
+        <Tab label="Month" value="month" />
+        <Tab label="Year" value="year" />
+      </Tabs>
+      
+      <Box sx={{ height: 300, width: '100%' }}>
+        {chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={chartData}
+              margin={{ top: 10, right: 10, left: 0, bottom: 20 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis 
+                dataKey="name" 
+                tick={{ fontSize: 12 }}
+                tickMargin={10}
+              />
+              <YAxis 
+                unit=" min" 
+                tick={{ fontSize: 12 }}
+                width={50}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="time" radius={[4, 4, 0, 0]}>
+                {chartData.map((entry, index) => (
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={entry.isToday ? theme.palette.secondary.main : theme.palette.primary.main} 
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <Box 
+            sx={{ 
+              height: '100%', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center' 
+            }}
+          >
+            <Typography variant="body1" color="text.secondary">
+              No study data available for this time period
+            </Typography>
+          </Box>
+        )}
+      </Box>
+    </Paper>
   );
 };
 

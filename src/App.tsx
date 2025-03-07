@@ -16,7 +16,9 @@ import {
   useMediaQuery,
   Fade,
   Zoom,
-  Slide
+  Slide,
+  Button,
+  IconButton
 } from '@mui/material';
 import Header from './components/Header';
 import StreakCard from './components/StreakCard';
@@ -24,6 +26,10 @@ import CheckInButton from './components/CheckInButton';
 import StudyHistory from './components/StudyHistory';
 import StudyTimer from './components/StudyTimer';
 import StudyTimeSummary from './components/StudyTimeSummary';
+import Login from './components/Login';
+import Register from './components/Register';
+import UserProfile from './components/UserProfile';
+import { AuthProvider, useAuth } from './utils/AuthContext';
 import { 
   initStreakData, 
   saveStreakData, 
@@ -36,6 +42,7 @@ import {
 import TodayIcon from '@mui/icons-material/Today';
 import HistoryIcon from '@mui/icons-material/History';
 import TimerIcon from '@mui/icons-material/Timer';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 
 // Create a theme
 const theme = createTheme({
@@ -50,21 +57,11 @@ const theme = createTheme({
       main: '#ff9800',
       light: '#ffb74d',
       dark: '#f57c00',
-      contrastText: '#ffffff',
-    },
-    success: {
-      main: '#4caf50',
-      light: '#81c784',
-      dark: '#388e3c',
-      contrastText: '#ffffff',
+      contrastText: '#000000',
     },
     background: {
       default: '#f5f5f5',
       paper: '#ffffff',
-    },
-    text: {
-      primary: 'rgba(0, 0, 0, 0.87)',
-      secondary: 'rgba(0, 0, 0, 0.6)',
     },
   },
   typography: {
@@ -73,113 +70,64 @@ const theme = createTheme({
       fontWeight: 600,
     },
     h5: {
-      fontWeight: 600,
-    },
-    h6: {
-      fontWeight: 600,
-    },
-    subtitle1: {
       fontWeight: 500,
     },
-    button: {
-      fontWeight: 600,
+    h6: {
+      fontWeight: 500,
     },
-  },
-  shape: {
-    borderRadius: 8,
   },
   components: {
     MuiButton: {
       styleOverrides: {
         root: {
           textTransform: 'none',
-          fontWeight: 600,
-          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
           borderRadius: 8,
+          padding: '10px 16px',
         },
         containedPrimary: {
+          boxShadow: '0 4px 6px rgba(33, 150, 243, 0.25)',
           '&:hover': {
-            boxShadow: '0 4px 10px rgba(33, 150, 243, 0.3)',
-          },
-        },
-        containedSecondary: {
-          '&:hover': {
-            boxShadow: '0 4px 10px rgba(255, 152, 0, 0.3)',
-          },
-        },
-        containedSuccess: {
-          backgroundColor: '#4caf50',
-          '&:hover': {
-            backgroundColor: '#388e3c',
-            boxShadow: '0 4px 10px rgba(76, 175, 80, 0.3)',
+            boxShadow: '0 6px 10px rgba(33, 150, 243, 0.35)',
           },
         },
       },
     },
     MuiPaper: {
       styleOverrides: {
-        root: {
+        rounded: {
           borderRadius: 12,
         },
         elevation1: {
           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
         },
-        elevation2: {
+        elevation3: {
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-        },
-      },
-    },
-    MuiBottomNavigation: {
-      styleOverrides: {
-        root: {
-          height: 70,
-        },
-      },
-    },
-    MuiBottomNavigationAction: {
-      styleOverrides: {
-        root: {
-          paddingTop: 8,
-          '&.Mui-selected': {
-            paddingTop: 8,
-          },
-        },
-        label: {
-          fontSize: '0.75rem',
-          '&.Mui-selected': {
-            fontSize: '0.75rem',
-          },
-        },
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          borderRadius: 12,
-          overflow: 'hidden',
-        },
-      },
-    },
-    MuiSnackbar: {
-      styleOverrides: {
-        root: {
-          '& .MuiAlert-root': {
-            borderRadius: 8,
-          },
-        },
-      },
-    },
-    MuiTab: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
         },
       },
     },
   },
 });
 
-function App() {
+// Main App component wrapped with AuthProvider
+const AppWithAuth = () => {
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
+  );
+};
+
+// App content with authentication
+function AppContent() {
+  // Get authentication state
+  const { currentUser } = useAuth();
+  
+  // State to track authentication UI
+  const [authView, setAuthView] = useState<'login' | 'register' | null>(null);
+  
   // State to track streak data
   const [streakData, setStreakData] = useState<StreakData>({
     currentStreak: 0,
@@ -205,31 +153,44 @@ function App() {
   // Check for mobile view
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  // Initialize data from localStorage on component mount
+  // Initialize data from localStorage or Firebase on component mount or user change
   useEffect(() => {
-    const data = initStreakData();
-    setStreakData(data);
+    const loadData = async () => {
+      try {
+        const data = await initStreakData(currentUser?.uid);
+        setStreakData(data);
+        
+        // Check if there's an active session
+        if (data.ongoingSession) {
+          setNotification({
+            open: true,
+            message: 'You have an active study session in progress.',
+            severity: 'info'
+          });
+        }
+      } catch (error) {
+        console.error('Error loading streak data:', error);
+        setNotification({
+          open: true,
+          message: 'Failed to load your data. Please try again.',
+          severity: 'error'
+        });
+      }
+    };
     
-    // Check if there's an active session
-    if (data.ongoingSession) {
-      setNotification({
-        open: true,
-        message: 'You have an active study session in progress.',
-        severity: 'info'
-      });
-    }
-  }, []);
+    loadData();
+  }, [currentUser]);
 
   // Handle daily check-in
-  const handleCheckIn = () => {
+  const handleCheckIn = async () => {
     // Check if user can check in today
     if (canCheckInToday(streakData.lastCheckInDate)) {
       // Update streak data
       const updatedData = updateStreakAfterCheckIn(streakData);
       
-      // Save to state and localStorage
+      // Save to state and storage
       setStreakData(updatedData);
-      saveStreakData(updatedData);
+      await saveStreakData(updatedData, currentUser?.uid);
       
       // Show success notification
       setNotification({
@@ -250,10 +211,10 @@ function App() {
   };
   
   // Handle study timer start
-  const handleTimerStart = () => {
+  const handleTimerStart = async () => {
     const updatedData = startStudySession(streakData);
     setStreakData(updatedData);
-    saveStreakData(updatedData);
+    await saveStreakData(updatedData, currentUser?.uid);
     
     setNotification({
       open: true,
@@ -263,10 +224,10 @@ function App() {
   };
   
   // Handle study timer stop
-  const handleTimerStop = () => {
+  const handleTimerStop = async () => {
     const updatedData = endStudySession(streakData);
     setStreakData(updatedData);
-    saveStreakData(updatedData);
+    await saveStreakData(updatedData, currentUser?.uid);
     
     // Calculate the duration of the session that just ended
     let lastSessionDuration = 0;
@@ -298,197 +259,188 @@ function App() {
   const handleCloseNotification = () => {
     setNotification(prev => ({ ...prev, open: false }));
   };
-
+  
   // Handle tab change
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
   
-  // Handle bottom navigation change (for mobile)
+  // Handle bottom navigation change
   const handleBottomNavChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
-
-  // Render the current tab content
-  const renderTabContent = () => {
-    switch (tabValue) {
-      case 0: // Today
-        return (
-          <Fade in={true} timeout={500}>
-            <Box>
-              <StreakCard 
-                currentStreak={streakData.currentStreak} 
-                totalReward={streakData.totalReward} 
-              />
-              
-              <CheckInButton 
-                onCheckIn={handleCheckIn}
-                canCheckIn={canCheckInToday(streakData.lastCheckInDate)}
-                lastCheckInDate={streakData.lastCheckInDate}
-              />
-              
-              <StudyTimer 
-                streakData={streakData}
-                onTimerStart={handleTimerStart}
-                onTimerStop={handleTimerStop}
-              />
-            </Box>
-          </Fade>
-        );
-        
-      case 1: // History
-        return (
-          <Fade in={true} timeout={500}>
-            <Box>
-              <StudyHistory streakData={streakData} />
-            </Box>
-          </Fade>
-        );
-        
-      case 2: // Time Summary
-        return (
-          <Fade in={true} timeout={500}>
-            <Box>
-              <StudyTimeSummary streakData={streakData} />
-            </Box>
-          </Fade>
-        );
-        
-      default:
-        return null;
-    }
+  
+  // Handle authentication success
+  const handleAuthSuccess = () => {
+    setAuthView(null);
+    setNotification({
+      open: true,
+      message: currentUser ? 'Welcome back!' : 'Registration successful! You are now logged in.',
+      severity: 'success'
+    });
   };
+  
+  // Handle logout
+  const handleLogout = () => {
+    setTabValue(0); // Reset to main tab
+    setNotification({
+      open: true,
+      message: 'You have been logged out.',
+      severity: 'info'
+    });
+  };
+  
+  // If showing auth view, render login or register
+  if (authView === 'login') {
+    return (
+      <Login 
+        onSuccess={handleAuthSuccess} 
+        onRegisterClick={() => setAuthView('register')} 
+      />
+    );
+  }
+  
+  if (authView === 'register') {
+    return (
+      <Register 
+        onSuccess={handleAuthSuccess} 
+        onLoginClick={() => setAuthView('login')} 
+      />
+    );
+  }
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Box sx={{ 
-        minHeight: '100vh',
-        backgroundColor: 'background.default',
-        display: 'flex',
-        flexDirection: 'column',
-        pb: isMobile ? 10 : 4 // Add padding at bottom for mobile navigation
-      }}>
-        <Header />
-        
-        <Container maxWidth="md" sx={{ mt: 3, mb: 4, flex: 1 }}>
-          {!isMobile ? (
-            // Desktop tabs
-            <Tabs
-              value={tabValue}
-              onChange={handleTabChange}
-              aria-label="app navigation"
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <Header 
+        streakCount={streakData.currentStreak} 
+        isLoggedIn={!!currentUser}
+        onLoginClick={() => setAuthView('login')}
+        onRegisterClick={() => setAuthView('register')}
+      />
+      
+      <Container component="main" sx={{ flexGrow: 1, py: 3 }}>
+        {/* Desktop tabs */}
+        {!isMobile && (
+          <Paper sx={{ mb: 3 }}>
+            <Tabs 
+              value={tabValue} 
+              onChange={handleTabChange} 
               centered
-              sx={{ 
-                mb: 3,
-                '& .MuiTab-root': {
-                  minWidth: 120,
-                  fontSize: '1rem',
-                  fontWeight: 500,
-                  borderRadius: '8px 8px 0 0',
-                  transition: 'all 0.2s',
-                  '&.Mui-selected': {
-                    fontWeight: 700,
-                    backgroundColor: 'rgba(33, 150, 243, 0.08)',
-                  },
-                  '&:not(.Mui-selected):hover': {
-                    backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                  },
-                },
-              }}
+              indicatorColor="primary"
+              textColor="primary"
             >
-              <Tab icon={<TodayIcon />} label="Today" iconPosition="start" />
-              <Tab icon={<HistoryIcon />} label="History" iconPosition="start" />
-              <Tab icon={<TimerIcon />} label="Time Summary" iconPosition="start" />
+              <Tab icon={<TodayIcon />} label="Today" />
+              <Tab icon={<HistoryIcon />} label="History" />
+              <Tab icon={<TimerIcon />} label="Timer" />
+              {currentUser && <Tab icon={<AccountCircleIcon />} label="Profile" />}
             </Tabs>
-          ) : null}
-          
-          <Divider sx={{ mb: 3, display: { xs: 'none', sm: 'block' } }} />
-          
-          <Paper 
-            elevation={0} 
-            sx={{ 
-              p: { xs: 2, sm: 4 }, 
-              borderRadius: 4,
-              backgroundColor: 'transparent',
-              overflow: 'hidden', // Needed for Fade animation
-              boxShadow: 'none'
-            }}
-          >
-            {renderTabContent()}
           </Paper>
-        </Container>
-        
-        {/* Mobile Bottom Navigation */}
-        {isMobile && (
-          <Slide direction="up" in={true} mountOnEnter unmountOnExit>
-            <Paper 
-              elevation={3} 
-              sx={{ 
-                position: 'fixed', 
-                bottom: 0, 
-                left: 0, 
-                right: 0, 
-                zIndex: 1000,
-                borderRadius: '16px 16px 0 0',
-                overflow: 'hidden'
-              }}
-            >
-              <BottomNavigation
-                showLabels
-                value={tabValue}
-                onChange={handleBottomNavChange}
-                sx={{
-                  boxShadow: '0px -2px 10px rgba(0, 0, 0, 0.1)',
-                }}
-              >
-                <BottomNavigationAction 
-                  label="Today" 
-                  icon={<TodayIcon />} 
-                />
-                <BottomNavigationAction 
-                  label="History" 
-                  icon={<HistoryIcon />} 
-                />
-                <BottomNavigationAction 
-                  label="Time" 
-                  icon={<TimerIcon />} 
-                />
-              </BottomNavigation>
-            </Paper>
-          </Slide>
         )}
         
-        <Snackbar 
-          open={notification.open} 
-          autoHideDuration={6000}
-          onClose={handleCloseNotification}
-          anchorOrigin={{ 
-            vertical: isMobile ? 'top' : 'bottom', 
-            horizontal: 'center' 
-          }}
-          sx={{ 
-            mb: isMobile ? 0 : 2,
-            bottom: isMobile ? 'auto' : 80
-          }}
-          TransitionComponent={Zoom}
-        >
-          <Alert 
-            onClose={handleCloseNotification} 
-            severity={notification.severity}
-            sx={{ 
-              width: '100%', 
-              borderRadius: 2, 
-              boxShadow: '0 2px 10px rgba(0,0,0,0.1)' 
-            }}
-            variant="filled"
+        {/* Tab content */}
+        <Box role="tabpanel" hidden={tabValue !== 0}>
+          {tabValue === 0 && (
+            <Fade in={tabValue === 0}>
+              <Box>
+                <StreakCard 
+                  currentStreak={streakData.currentStreak}
+                  longestStreak={streakData.longestStreak}
+                  totalDaysStudied={streakData.totalDaysStudied}
+                  totalReward={streakData.totalReward}
+                />
+                
+                <Box sx={{ mt: 3 }}>
+                  <CheckInButton 
+                    onCheckIn={handleCheckIn}
+                    disabled={!canCheckInToday(streakData.lastCheckInDate)}
+                    lastCheckIn={streakData.lastCheckInDate}
+                  />
+                </Box>
+                
+                <Divider sx={{ my: 4 }} />
+                
+                <StudyTimeSummary 
+                  studySessions={streakData.studySessions}
+                  ongoingSession={streakData.ongoingSession}
+                />
+              </Box>
+            </Fade>
+          )}
+        </Box>
+        
+        <Box role="tabpanel" hidden={tabValue !== 1}>
+          {tabValue === 1 && (
+            <Zoom in={tabValue === 1}>
+              <Box>
+                <StudyHistory 
+                  studyDays={streakData.studyDays}
+                  studySessions={streakData.studySessions}
+                />
+              </Box>
+            </Zoom>
+          )}
+        </Box>
+        
+        <Box role="tabpanel" hidden={tabValue !== 2}>
+          {tabValue === 2 && (
+            <Slide direction="up" in={tabValue === 2} mountOnEnter unmountOnExit>
+              <Box>
+                <StudyTimer 
+                  onStart={handleTimerStart}
+                  onStop={handleTimerStop}
+                  isRunning={!!streakData.ongoingSession}
+                  startTime={streakData.ongoingSession ? new Date(streakData.ongoingSession.startTime) : null}
+                />
+              </Box>
+            </Slide>
+          )}
+        </Box>
+        
+        <Box role="tabpanel" hidden={tabValue !== 3 || !currentUser}>
+          {tabValue === 3 && currentUser && (
+            <Fade in={tabValue === 3}>
+              <Box>
+                <UserProfile onLogout={handleLogout} />
+              </Box>
+            </Fade>
+          )}
+        </Box>
+      </Container>
+      
+      {/* Mobile bottom navigation */}
+      {isMobile && (
+        <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0 }} elevation={3}>
+          <BottomNavigation
+            showLabels
+            value={tabValue}
+            onChange={handleBottomNavChange}
           >
-            {notification.message}
-          </Alert>
-        </Snackbar>
-      </Box>
-    </ThemeProvider>
+            <BottomNavigationAction label="Today" icon={<TodayIcon />} />
+            <BottomNavigationAction label="History" icon={<HistoryIcon />} />
+            <BottomNavigationAction label="Timer" icon={<TimerIcon />} />
+            {currentUser && <BottomNavigationAction label="Profile" icon={<AccountCircleIcon />} />}
+          </BottomNavigation>
+        </Paper>
+      )}
+      
+      {/* Notification snackbar */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={6000}
+        onClose={handleCloseNotification}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={handleCloseNotification} 
+          severity={notification.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {notification.message}
+        </Alert>
+      </Snackbar>
+    </Box>
   );
 }
 
-export default App;
+export default AppWithAuth;

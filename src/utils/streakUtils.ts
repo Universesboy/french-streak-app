@@ -1,4 +1,5 @@
 import { differenceInDays, isSameDay, startOfDay, format, parse, isValid, isBefore, isAfter, getWeek, getMonth, getYear, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval } from 'date-fns';
+import { saveUserStreakData, getUserStreakData } from './firebase';
 
 export interface StudySession {
   startTime: string; // ISO string
@@ -22,8 +23,21 @@ export interface StreakData {
 
 const STORAGE_KEY = 'french-streak-data';
 
-// Initialize streak data from localStorage or with default values
-export const initStreakData = (): StreakData => {
+// Initialize streak data from localStorage or Firebase
+export const initStreakData = async (userId?: string): Promise<StreakData> => {
+  // If user is logged in, try to get data from Firebase
+  if (userId) {
+    try {
+      const { data, error } = await getUserStreakData(userId);
+      if (data && !error) {
+        return data;
+      }
+    } catch (error) {
+      console.error('Error fetching data from Firebase:', error);
+    }
+  }
+  
+  // Fallback to localStorage
   const storedData = localStorage.getItem(STORAGE_KEY);
   
   if (storedData) {
@@ -42,9 +56,19 @@ export const initStreakData = (): StreakData => {
   };
 };
 
-// Save streak data to localStorage
-export const saveStreakData = (data: StreakData): void => {
+// Save streak data to localStorage and Firebase if user is logged in
+export const saveStreakData = async (data: StreakData, userId?: string): Promise<void> => {
+  // Always save to localStorage as a backup
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  
+  // If user is logged in, also save to Firebase
+  if (userId) {
+    try {
+      await saveUserStreakData(userId, data);
+    } catch (error) {
+      console.error('Error saving data to Firebase:', error);
+    }
+  }
 };
 
 // Calculate the reward for a given streak day
@@ -275,99 +299,87 @@ export const getYearlyStudyTimeSummary = (sessions: StudySession[]): Record<stri
   return summary;
 };
 
-// Get the most recent study session summary
-export const getRecentStudySummary = (data: StreakData) => {
-  const { studySessions } = data;
+// Get recent study summary (accepts StudySession[] instead of StreakData)
+export const getRecentStudySummary = (studySessions: StudySession[]) => {
+  // Today's date (start of day)
+  const today = startOfDay(new Date());
   
-  if (studySessions.length === 0) {
-    return null;
-  }
+  // Time studied today
+  const todayString = format(today, 'yyyy-MM-dd');
+  const todaySessions = studySessions.filter(session => session.date === todayString);
+  const todayTime = todaySessions.reduce((total, session) => total + session.duration, 0);
   
-  const now = new Date();
-  const today = startOfDay(now);
-  const todaySessions = studySessions.filter(session => 
-    isSameDay(new Date(session.date), today)
-  );
+  // Time studied this week
+  const startOfWeekDate = startOfWeek(today);
+  const endOfWeekDate = endOfWeek(today);
+  const weekTime = getTimeStudiedInRange(studySessions, startOfWeekDate, endOfWeekDate);
   
-  const thisWeekStart = startOfWeek(today, { weekStartsOn: 0 });
-  const thisWeekEnd = endOfWeek(today, { weekStartsOn: 0 });
+  // Time studied this month
+  const startOfMonthDate = startOfMonth(today);
+  const endOfMonthDate = endOfMonth(today);
+  const monthTime = getTimeStudiedInRange(studySessions, startOfMonthDate, endOfMonthDate);
   
-  const thisMonthStart = startOfMonth(today);
-  const thisMonthEnd = endOfMonth(today);
-  
-  const thisYearStart = startOfYear(today);
-  const thisYearEnd = endOfYear(today);
+  // Time studied this year
+  const startOfYearDate = startOfYear(today);
+  const endOfYearDate = endOfYear(today);
+  const yearTime = getTimeStudiedInRange(studySessions, startOfYearDate, endOfYearDate);
   
   return {
-    today: {
-      totalSessions: todaySessions.length,
-      totalTime: todaySessions.reduce((sum, session) => sum + session.duration, 0)
-    },
-    thisWeek: {
-      totalTime: getTimeStudiedInRange(studySessions, thisWeekStart, thisWeekEnd)
-    },
-    thisMonth: {
-      totalTime: getTimeStudiedInRange(studySessions, thisMonthStart, thisMonthEnd)
-    },
-    thisYear: {
-      totalTime: getTimeStudiedInRange(studySessions, thisYearStart, thisYearEnd)
-    },
-    allTime: {
-      totalSessions: studySessions.length,
-      totalTime: studySessions.reduce((sum, session) => sum + session.duration, 0)
-    }
+    todayTime,
+    weekTime,
+    monthTime,
+    yearTime
   };
 };
 
-// Update streak data after a check-in
+// Update streak after check-in
 export const updateStreakAfterCheckIn = (data: StreakData): StreakData => {
   const today = new Date();
-  const lastCheckInDate = data.lastCheckInDate ? new Date(data.lastCheckInDate) : null;
+  const formattedToday = getFormattedDate(today);
   
-  let newStreak = data.currentStreak;
-  
-  // If this is the first check-in or there's no streak yet
-  if (!lastCheckInDate) {
-    newStreak = 1;
-  } 
-  // If user checked in yesterday, increment the streak
-  else if (differenceInDays(today, lastCheckInDate) === 1) {
-    newStreak += 1;
-  } 
-  // If user checked in today already, don't change streak
-  else if (isSameDay(today, lastCheckInDate)) {
+  // Check if already checked in today
+  if (data.lastCheckInDate && isSameDay(today, new Date(data.lastCheckInDate))) {
     return data;
-  } 
-  // If user missed a day or more, reset streak
-  else {
-    newStreak = 1;
   }
   
-  // Format today's date as YYYY-MM-DD
-  const todayFormatted = getFormattedDate(today);
+  let newStreak = 1;
+  let newTotalReward = 0;
+  
+  // If there was a previous check-in and it was yesterday, increment the streak
+  if (data.lastCheckInDate) {
+    const lastDate = new Date(data.lastCheckInDate);
+    const daysSinceLastCheckIn = differenceInDays(today, lastDate);
+    
+    if (daysSinceLastCheckIn === 1) {
+      // Consecutive day, increment streak
+      newStreak = data.currentStreak + 1;
+      newTotalReward = calculateTotalReward(newStreak);
+    } else {
+      // Streak broken, start over
+      newStreak = 1;
+      newTotalReward = calculateDailyReward(1);
+    }
+  } else {
+    // First check-in ever
+    newTotalReward = calculateDailyReward(1);
+  }
   
   // Add today to study days if not already included
-  const newStudyDays = data.studyDays.includes(todayFormatted)
-    ? data.studyDays
-    : [...data.studyDays, todayFormatted];
-    
-  // Calculate new total reward
-  const newTotalReward = calculateTotalReward(newStreak);
+  const newStudyDays = [...data.studyDays];
+  if (!newStudyDays.includes(formattedToday)) {
+    newStudyDays.push(formattedToday);
+  }
   
-  // Calculate new longest streak
-  const newLongestStreak = Math.max(newStreak, data.longestStreak);
-  
-  // Calculate total days studied
-  const newTotalDaysStudied = newStudyDays.length;
+  // Calculate longest streak
+  const newLongestStreak = Math.max(data.longestStreak, newStreak);
   
   return {
+    ...data,
     currentStreak: newStreak,
-    lastCheckInDate: today.toISOString(),
+    lastCheckInDate: formattedToday,
     totalReward: newTotalReward,
     studyDays: newStudyDays,
     longestStreak: newLongestStreak,
-    totalDaysStudied: newTotalDaysStudied,
-    studySessions: data.studySessions,
-    ongoingSession: data.ongoingSession
+    totalDaysStudied: newStudyDays.length
   };
 }; 

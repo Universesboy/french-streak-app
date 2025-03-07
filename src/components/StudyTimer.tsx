@@ -12,7 +12,8 @@ import {
   useTheme,
   useMediaQuery,
   Fab,
-  Zoom
+  Zoom,
+  Divider
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
@@ -23,11 +24,14 @@ import {
 } from '@mui/icons-material';
 import { formatTime } from '../utils/streakUtils';
 import type { StreakData } from '../utils/streakUtils';
+import { differenceInSeconds } from 'date-fns';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 
 interface StudyTimerProps {
-  streakData: StreakData;
-  onTimerStart: () => void;
-  onTimerStop: () => void;
+  onStart: () => void;
+  onStop: () => void;
+  isRunning: boolean;
+  startTime: Date | null;
 }
 
 interface StyledComponentProps {
@@ -86,225 +90,184 @@ const StatCard = styled(Card)(({ theme }) => ({
 }));
 
 const StudyTimer: React.FC<StudyTimerProps> = ({ 
-  streakData, 
-  onTimerStart, 
-  onTimerStop 
+  onStart, 
+  onStop, 
+  isRunning, 
+  startTime 
 }) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [seconds, setSeconds] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
   
-  // Initialize timer based on ongoing session if exists
+  // Update elapsed time every second when timer is running
   useEffect(() => {
-    if (streakData.ongoingSession) {
-      setIsRunning(true);
-      const startTime = new Date(streakData.ongoingSession.startTime);
-      const elapsedSeconds = Math.floor((new Date().getTime() - startTime.getTime()) / 1000);
-      setSeconds(elapsedSeconds);
-    } else {
-      setIsRunning(false);
-      setSeconds(0);
-    }
-  }, [streakData.ongoingSession]);
-  
-  // Timer tick effect
-  useEffect(() => {
-    let interval: number | undefined = undefined;
-    
-    if (isRunning) {
-      interval = window.setInterval(() => {
-        setSeconds(prev => prev + 1);
-      }, 1000);
+    if (!isRunning || !startTime) {
+      return;
     }
     
-    return () => {
-      if (interval !== undefined) {
-        window.clearInterval(interval);
-      }
-    };
-  }, [isRunning]);
+    const intervalId = setInterval(() => {
+      const now = new Date();
+      const secondsElapsed = differenceInSeconds(now, startTime);
+      setElapsedTime(secondsElapsed);
+    }, 1000);
+    
+    return () => clearInterval(intervalId);
+  }, [isRunning, startTime]);
   
-  // Handle start button click
-  const handleStart = () => {
-    setIsRunning(true);
-    onTimerStart();
+  // Format time as HH:MM:SS
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    return [
+      hours.toString().padStart(2, '0'),
+      minutes.toString().padStart(2, '0'),
+      secs.toString().padStart(2, '0')
+    ].join(':');
   };
   
-  // Handle stop button click
-  const handleStop = () => {
-    setIsRunning(false);
-    onTimerStop();
-  };
-  
-  // Calculate progress percentage for circular progress (cycles every hour)
-  const progressPercentage = (seconds % 3600) / 3600 * 100;
-  
-  // Get time summaries from streak data
-  const summaries = streakData.studySessions.length > 0 ? {
-    todayTime: streakData.studySessions
-      .filter(session => session.date === new Date().toISOString().split('T')[0])
-      .reduce((total, session) => total + session.duration, 0),
-    totalTime: streakData.studySessions
-      .reduce((total, session) => total + session.duration, 0)
-  } : { todayTime: 0, totalTime: 0 };
-  
-  // Format hours and minutes from seconds
-  const formatHoursMinutes = (totalSeconds: number) => {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    } else {
-      return `${minutes}m`;
-    }
+  // Calculate progress percentage for circular progress (max 2 hours = 7200 seconds)
+  const calculateProgress = () => {
+    const maxTime = 7200; // 2 hours
+    const progress = (elapsedTime / maxTime) * 100;
+    return Math.min(progress, 100);
   };
   
   return (
-    <Box sx={{ mt: 4 }}>
-      <Typography variant="h5" component="h2" sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        mb: 3,
-        fontWeight: 'bold'
-      }}>
+    <Paper 
+      elevation={2} 
+      sx={{ 
+        p: 3, 
+        borderRadius: 3,
+        backgroundColor: theme.palette.background.paper
+      }}
+    >
+      <Typography 
+        variant="h5" 
+        component="h2" 
+        gutterBottom 
+        sx={{ 
+          fontWeight: 'bold',
+          textAlign: 'center',
+          mb: 3,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
         <TimerIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
         Study Timer
       </Typography>
       
-      <Paper 
-        elevation={0} 
-        sx={{ 
-          p: isMobile ? 2 : 4, 
-          borderRadius: 4,
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-          backgroundColor: '#fff',
-          mb: 4
-        }}
-      >
-        <CircularProgressWrapper isMobile={isMobile}>
-          <CircularProgress
-            variant="determinate"
-            value={progressPercentage}
-            size={isMobile ? 200 : 240}
-            thickness={4}
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={6}>
+          <Box 
             sx={{ 
-              color: isRunning ? theme.palette.success.main : theme.palette.primary.main,
-              transition: 'color 0.3s ease'
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'relative',
+              mb: { xs: 2, md: 0 }
             }}
-          />
-          <TimerDisplay variant="h2" isMobile={isMobile}>
-            {formatTime(seconds)}
-          </TimerDisplay>
-        </CircularProgressWrapper>
-        
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          mt: 4,
-          flexWrap: 'wrap'
-        }}>
-          {isMobile ? (
-            // Mobile controls - Floating Action Button
-            <Zoom in={true}>
-              {isRunning ? (
-                <ControlFab
-                  color="error"
-                  size="large"
-                  onClick={handleStop}
-                  sx={{ width: 80, height: 80 }}
-                >
-                  <StopIcon sx={{ fontSize: 40 }} />
-                </ControlFab>
-              ) : (
-                <ControlFab
-                  color="success"
-                  size="large"
-                  onClick={handleStart}
-                  sx={{ width: 80, height: 80 }}
-                >
-                  <PlayIcon sx={{ fontSize: 40 }} />
-                </ControlFab>
-              )}
-            </Zoom>
-          ) : (
-            // Desktop controls - Regular buttons
-            isRunning ? (
-              <ControlButton
-                variant="contained"
-                color="error"
-                startIcon={<StopIcon />}
-                onClick={handleStop}
-                size="large"
+          >
+            <Box 
+              sx={{ 
+                position: 'relative', 
+                display: 'inline-flex',
+                mb: 2
+              }}
+            >
+              <CircularProgress
+                variant="determinate"
+                value={calculateProgress()}
+                size={200}
+                thickness={4}
+                sx={{
+                  color: isRunning ? theme.palette.secondary.main : theme.palette.primary.main,
+                  '& .MuiCircularProgress-circle': {
+                    strokeLinecap: 'round',
+                  },
+                }}
+              />
+              <Box
+                sx={{
+                  top: 0,
+                  left: 0,
+                  bottom: 0,
+                  right: 0,
+                  position: 'absolute',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
               >
-                Stop
-              </ControlButton>
-            ) : (
-              <ControlButton
-                variant="contained"
-                color="success"
-                startIcon={<PlayIcon />}
-                onClick={handleStart}
-                size="large"
-              >
-                Start
-              </ControlButton>
-            )
-          )}
-        </Box>
-        
-        <Typography 
-          variant="body2" 
-          color="text.secondary" 
-          sx={{ 
-            textAlign: 'center', 
-            mt: 2,
-            fontSize: isMobile ? '0.8rem' : '0.875rem'
-          }}
-        >
-          {isRunning 
-            ? "Your study session is being tracked. Click 'Stop' when you finish."
-            : "Click 'Start' to begin tracking your study time."
-          }
-        </Typography>
-      </Paper>
-      
-      <Typography variant="h6" sx={{ mt: 4, mb: 2, display: 'flex', alignItems: 'center' }}>
-        <ChartIcon sx={{ mr: 1, color: theme.palette.secondary.main }} />
-        Quick Study Summary
-      </Typography>
-      
-      <Grid container spacing={isMobile ? 2 : 3}>
-        <Grid item xs={12} sm={6}>
-          <StatCard>
-            <CardContent sx={{ textAlign: 'center', py: isMobile ? 2 : 3 }}>
-              <ClockIcon sx={{ fontSize: isMobile ? 30 : 40, color: theme.palette.primary.main, mb: 1 }} />
-              <Typography variant={isMobile ? "h6" : "h5"} component="div" sx={{ fontWeight: 'bold' }}>
-                {formatHoursMinutes(summaries.todayTime + (isRunning ? seconds : 0))}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Time Studied Today
-              </Typography>
-            </CardContent>
-          </StatCard>
+                <Typography
+                  variant="h3"
+                  component="div"
+                  sx={{ fontWeight: 'bold' }}
+                >
+                  {formatTime(elapsedTime)}
+                </Typography>
+              </Box>
+            </Box>
+            
+            <Button
+              variant="contained"
+              color={isRunning ? "error" : "primary"}
+              size="large"
+              startIcon={isRunning ? <StopIcon /> : <PlayArrowIcon />}
+              onClick={isRunning ? onStop : onStart}
+              sx={{ 
+                px: 4, 
+                py: 1.5,
+                borderRadius: 2,
+                fontWeight: 'bold',
+                fontSize: '1rem',
+              }}
+            >
+              {isRunning ? 'Stop Timer' : 'Start Timer'}
+            </Button>
+          </Box>
         </Grid>
         
-        <Grid item xs={12} sm={6}>
-          <StatCard>
-            <CardContent sx={{ textAlign: 'center', py: isMobile ? 2 : 3 }}>
-              <ClockIcon sx={{ fontSize: isMobile ? 30 : 40, color: theme.palette.secondary.main, mb: 1 }} />
-              <Typography variant={isMobile ? "h6" : "h5"} component="div" sx={{ fontWeight: 'bold' }}>
-                {formatHoursMinutes(summaries.totalTime + (isRunning ? seconds : 0))}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Time Studied
-              </Typography>
-            </CardContent>
-          </StatCard>
+        <Grid item xs={12} md={6}>
+          <Box sx={{ height: '100%' }}>
+            <Typography variant="h6" gutterBottom>
+              Timer Instructions
+            </Typography>
+            
+            <Divider sx={{ mb: 2 }} />
+            
+            <Typography variant="body1" paragraph>
+              Use this timer to track your French study sessions. Your study time will be recorded and added to your statistics.
+            </Typography>
+            
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              <strong>How to use:</strong>
+            </Typography>
+            
+            <Box component="ol" sx={{ pl: 2 }}>
+              <Box component="li" sx={{ mb: 1 }}>
+                <Typography variant="body2">
+                  Click "Start Timer" when you begin studying
+                </Typography>
+              </Box>
+              <Box component="li" sx={{ mb: 1 }}>
+                <Typography variant="body2">
+                  The timer will continue running even if you close the app
+                </Typography>
+              </Box>
+              <Box component="li">
+                <Typography variant="body2">
+                  Click "Stop Timer" when you finish your study session
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
         </Grid>
       </Grid>
-    </Box>
+    </Paper>
   );
 };
 

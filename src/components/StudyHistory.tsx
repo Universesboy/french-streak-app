@@ -1,384 +1,390 @@
 import React, { useState } from 'react';
 import { 
-  Box, 
-  Typography, 
   Paper, 
+  Typography, 
+  Box, 
   Grid, 
-  Card, 
-  CardContent,
-  Divider,
-  Button,
-  styled,
-  useTheme,
-  useMediaQuery,
-  IconButton,
-  Stack,
-  Tooltip
+  Tabs, 
+  Tab,
+  useTheme
 } from '@mui/material';
 import { 
-  CalendarMonth as CalendarIcon,
-  EmojiEvents as TrophyIcon,
-  Insights as InsightsIcon,
-  Schedule as ScheduleIcon,
-  CheckCircle as CheckCircleIcon,
-  ChevronLeft as ChevronLeftIcon,
-  ChevronRight as ChevronRightIcon,
-  Today as TodayIcon
-} from '@mui/icons-material';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isWeekend, isSameDay, addMonths, subMonths } from 'date-fns';
-import { getStudyStatistics } from '../utils/streakUtils';
-import type { StreakData } from '../utils/streakUtils';
+  format, 
+  startOfMonth, 
+  endOfMonth, 
+  eachDayOfInterval, 
+  isSameDay,
+  getMonth,
+  getYear,
+  differenceInCalendarDays
+} from 'date-fns';
+import { StudySession } from '../utils/streakUtils';
 
 interface StudyHistoryProps {
-  streakData: StreakData;
+  studyDays: string[];
+  studySessions: StudySession[];
 }
 
-interface StyledCalendarDayProps {
-  isStudyDay: boolean; 
-  isWeekend: boolean;
-  isCurrentMonth: boolean;
-  isToday: boolean;
-}
-
-const StyledCalendarDay = styled(Box, {
-  shouldForwardProp: (prop) => 
-    prop !== 'isStudyDay' && 
-    prop !== 'isWeekend' && 
-    prop !== 'isCurrentMonth' &&
-    prop !== 'isToday'
-})<StyledCalendarDayProps>(({ isStudyDay, isWeekend, isCurrentMonth, isToday, theme }) => ({
-  width: '34px',
-  height: '34px',
-  '@media (max-width: 600px)': {
-    width: '28px',
-    height: '28px',
-    fontSize: '0.8rem',
-  },
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  margin: '2px',
-  borderRadius: '50%',
-  cursor: 'pointer',
-  fontWeight: isStudyDay ? 600 : 400,
-  color: !isCurrentMonth ? theme.palette.text.disabled : 
-         isStudyDay ? '#fff' : 
-         isWeekend ? theme.palette.text.secondary : 
-         theme.palette.text.primary,
-  backgroundColor: isStudyDay ? theme.palette.primary.main : 
-                  isToday ? 'rgba(33, 150, 243, 0.1)' : 
-                  'transparent',
-  border: isToday && !isStudyDay ? `2px solid ${theme.palette.primary.main}` : 'none',
-  boxSizing: 'border-box',
-  position: 'relative',
-  '&:hover': {
-    backgroundColor: isStudyDay ? theme.palette.primary.dark : theme.palette.action.hover,
-  },
-  transition: 'background-color 0.2s, transform 0.2s',
-}));
-
-const StatCard = styled(Card)(({ theme }) => ({
-  height: '100%',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-  transition: 'transform 0.2s, box-shadow 0.2s',
-  '&:hover': {
-    transform: 'translateY(-4px)',
-    boxShadow: '0 6px 12px rgba(0,0,0,0.12)',
-  },
-}));
-
-const NavButton = styled(IconButton)(({ theme }) => ({
-  backgroundColor: theme.palette.background.paper,
-  boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-  '&:hover': {
-    backgroundColor: theme.palette.background.paper,
-    boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
-  }
-}));
-
-const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-const StudyHistory: React.FC<StudyHistoryProps> = ({ streakData }) => {
+const StudyHistory: React.FC<StudyHistoryProps> = ({ studyDays, studySessions }) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [tabValue, setTabValue] = useState(0);
   
-  // Get study statistics
-  const statistics = getStudyStatistics(streakData);
+  // Get days in the current month
+  const daysInMonth = eachDayOfInterval({
+    start: startOfMonth(currentMonth),
+    end: endOfMonth(currentMonth)
+  });
   
-  // Navigate to previous month
-  const prevMonth = () => {
-    setCurrentMonth(prev => subMonths(prev, 1));
+  // Handle month navigation
+  const handlePreviousMonth = () => {
+    const prevMonth = new Date(currentMonth);
+    prevMonth.setMonth(prevMonth.getMonth() - 1);
+    setCurrentMonth(prevMonth);
   };
   
-  // Navigate to next month
-  const nextMonth = () => {
-    setCurrentMonth(prev => addMonths(prev, 1));
+  const handleNextMonth = () => {
+    const nextMonth = new Date(currentMonth);
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    setCurrentMonth(nextMonth);
   };
   
-  // Reset to current month
-  const resetToCurrentMonth = () => {
-    setCurrentMonth(new Date());
+  // Handle tab change
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
   };
   
-  // Generate days for the calendar
-  const generateCalendarDays = () => {
-    const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(currentMonth);
-    const startDate = new Date(monthStart);
-    const endDate = new Date(monthEnd);
-    const today = new Date();
+  // Get study sessions for the current month
+  const monthSessions = studySessions.filter(session => {
+    const sessionDate = new Date(session.date);
+    return (
+      getMonth(sessionDate) === getMonth(currentMonth) &&
+      getYear(sessionDate) === getYear(currentMonth)
+    );
+  });
+  
+  // Calculate total study time for the month
+  const totalMonthStudyTime = monthSessions.reduce((total, session) => {
+    return total + session.duration;
+  }, 0);
+  
+  // Format time in hours and minutes
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
     
-    // Adjust to start from the first day of the week (Sunday)
-    startDate.setDate(1 - getDay(monthStart));
-    // Adjust to end on the last day of the week
-    const lastDay = getDay(monthEnd);
-    endDate.setDate(endDate.getDate() + (6 - lastDay));
-    
-    const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate });
-    
-    return daysInMonth.map(day => {
-      const formattedDate = format(day, 'yyyy-MM-dd');
-      const isStudyDay = streakData.studyDays.includes(formattedDate);
-      const dayIsWeekend = isWeekend(day);
-      const isCurrentMonthDay = day.getMonth() === currentMonth.getMonth();
-      const isTodayDate = isSameDay(day, today);
-      
-      return (
-        <StyledCalendarDay
-          key={formattedDate}
-          isStudyDay={isStudyDay}
-          isWeekend={dayIsWeekend}
-          isCurrentMonth={isCurrentMonthDay}
-          isToday={isTodayDate}
-          data-date={formattedDate}
-          aria-label={`${formattedDate}: ${isStudyDay ? 'Studied' : 'Not studied'}`}
-        >
-          {format(day, 'd')}
-          {isStudyDay && isMobile && (
-            <Box 
-              component="span" 
-              sx={{
-                position: 'absolute',
-                bottom: -4,
-                width: 4,
-                height: 4,
-                backgroundColor: theme.palette.secondary.main,
-                borderRadius: '50%',
-                display: { xs: 'none', sm: 'block' }
-              }}
-            />
-          )}
-        </StyledCalendarDay>
-      );
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${minutes}m`;
+    }
+  };
+  
+  // Get study sessions for a specific day
+  const getSessionsForDay = (day: Date) => {
+    return studySessions.filter(session => {
+      const sessionDate = new Date(session.date);
+      return isSameDay(sessionDate, day);
     });
   };
   
+  // Calculate streak lengths
+  const calculateStreakLengths = () => {
+    if (studyDays.length === 0) return [];
+    
+    // Sort study days chronologically
+    const sortedDays = [...studyDays].sort((a, b) => {
+      return new Date(a).getTime() - new Date(b).getTime();
+    });
+    
+    const streaks: { start: string; end: string; length: number }[] = [];
+    let streakStart = sortedDays[0];
+    let currentDate = new Date(sortedDays[0]);
+    
+    for (let i = 1; i < sortedDays.length; i++) {
+      const nextDate = new Date(sortedDays[i]);
+      const dayDiff = differenceInCalendarDays(nextDate, currentDate);
+      
+      if (dayDiff > 1) {
+        // End of streak
+        streaks.push({
+          start: streakStart,
+          end: sortedDays[i-1],
+          length: differenceInCalendarDays(
+            new Date(sortedDays[i-1]), 
+            new Date(streakStart)
+          ) + 1
+        });
+        streakStart = sortedDays[i];
+      }
+      
+      currentDate = nextDate;
+    }
+    
+    // Add the last streak
+    streaks.push({
+      start: streakStart,
+      end: sortedDays[sortedDays.length - 1],
+      length: differenceInCalendarDays(
+        new Date(sortedDays[sortedDays.length - 1]), 
+        new Date(streakStart)
+      ) + 1
+    });
+    
+    // Sort by length (descending)
+    return streaks.sort((a, b) => b.length - a.length);
+  };
+  
+  const streaks = calculateStreakLengths();
+  
   return (
-    <Box sx={{ mt: 4 }}>
-      <Typography variant="h5" component="h2" sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        mb: 3,
-        fontWeight: 'bold'
-      }}>
-        <CalendarIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
-        Your Study History
-      </Typography>
-      
-      {/* Statistics Cards */}
-      <Grid container spacing={isMobile ? 1 : 2} sx={{ mb: 4 }}>
-        <Grid item xs={6} sm={6} md={3}>
-          <StatCard>
-            <CardContent sx={{ textAlign: 'center', p: isMobile ? 1.5 : 3 }}>
-              <TrophyIcon sx={{ fontSize: isMobile ? 28 : 40, color: '#FFD700', mb: 1 }} />
-              <Typography variant={isMobile ? "h6" : "h5"} component="div" sx={{ fontWeight: 'bold' }}>
-                {statistics.longestStreak}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Longest Streak
-              </Typography>
-            </CardContent>
-          </StatCard>
-        </Grid>
-        
-        <Grid item xs={6} sm={6} md={3}>
-          <StatCard>
-            <CardContent sx={{ textAlign: 'center', p: isMobile ? 1.5 : 3 }}>
-              <CheckCircleIcon sx={{ fontSize: isMobile ? 28 : 40, color: '#4CAF50', mb: 1 }} />
-              <Typography variant={isMobile ? "h6" : "h5"} component="div" sx={{ fontWeight: 'bold' }}>
-                {statistics.totalDaysStudied}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Days Studied
-              </Typography>
-            </CardContent>
-          </StatCard>
-        </Grid>
-        
-        <Grid item xs={6} sm={6} md={3}>
-          <StatCard>
-            <CardContent sx={{ textAlign: 'center', p: isMobile ? 1.5 : 3 }}>
-              <InsightsIcon sx={{ fontSize: isMobile ? 28 : 40, color: '#2196F3', mb: 1 }} />
-              <Typography variant={isMobile ? "h6" : "h5"} component="div" sx={{ fontWeight: 'bold' }}>
-                {statistics.studyFrequency}%
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Study Frequency
-              </Typography>
-            </CardContent>
-          </StatCard>
-        </Grid>
-        
-        <Grid item xs={6} sm={6} md={3}>
-          <StatCard>
-            <CardContent sx={{ textAlign: 'center', p: isMobile ? 1.5 : 3 }}>
-              <ScheduleIcon sx={{ fontSize: isMobile ? 28 : 40, color: '#FF9800', mb: 1 }} />
-              <Typography variant={isMobile ? "h6" : "h5"} component="div" sx={{ fontWeight: 'bold' }}>
-                {statistics.currentStreak}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Current Streak
-              </Typography>
-            </CardContent>
-          </StatCard>
-        </Grid>
-      </Grid>
-      
-      {/* Calendar */}
-      <Paper 
-        elevation={0} 
+    <Paper 
+      elevation={2} 
+      sx={{ 
+        p: 3, 
+        borderRadius: 3,
+        backgroundColor: theme.palette.background.paper
+      }}
+    >
+      <Typography 
+        variant="h5" 
+        component="h2" 
+        gutterBottom 
         sx={{ 
-          p: isMobile ? 1 : 3, 
-          borderRadius: 4,
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-          backgroundColor: '#fff',
+          fontWeight: 'bold',
+          textAlign: 'center',
+          mb: 3
         }}
       >
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          mb: 2
-        }}>
-          <NavButton 
-            onClick={prevMonth}
-            size="small"
-            aria-label="Previous month"
+        Study History
+      </Typography>
+      
+      <Tabs 
+        value={tabValue} 
+        onChange={handleTabChange} 
+        centered
+        sx={{ mb: 3 }}
+      >
+        <Tab label="Calendar" />
+        <Tab label="Streaks" />
+        <Tab label="Sessions" />
+      </Tabs>
+      
+      {/* Calendar View */}
+      {tabValue === 0 && (
+        <>
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              mb: 2
+            }}
           >
-            <ChevronLeftIcon />
-          </NavButton>
-          
-          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-            {format(currentMonth, 'MMMM yyyy')}
-          </Typography>
-          
-          <NavButton 
-            onClick={nextMonth}
-            size="small"
-            aria-label="Next month"
-          >
-            <ChevronRightIcon />
-          </NavButton>
-        </Box>
-        
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-          <Tooltip title="Go to today">
-            <Button 
-              variant="outlined" 
-              size="small" 
-              onClick={resetToCurrentMonth}
-              startIcon={<TodayIcon />}
-            >
-              Today
-            </Button>
-          </Tooltip>
-        </Box>
-        
-        <Divider sx={{ mb: 2 }} />
-        
-        {/* Days of Week */}
-        <Box sx={{ 
-          display: 'flex', 
-          flexWrap: 'wrap',
-          justifyContent: 'center',
-          mb: 1
-        }}>
-          {daysOfWeek.map(day => (
-            <Box 
-              key={day}
-              sx={{ 
-                width: isMobile ? '28px' : '36px', 
-                textAlign: 'center', 
-                margin: '2px',
-                fontWeight: 'bold',
-                fontSize: isMobile ? '0.7rem' : '0.8rem',
-                color: day === 'Sun' || day === 'Sat' ? theme.palette.text.secondary : theme.palette.text.primary
+            <button
+              onClick={handlePreviousMonth}
+              style={{ 
+                border: 'none', 
+                background: 'none', 
+                cursor: 'pointer',
+                color: theme.palette.primary.main
               }}
             >
-              {isMobile ? day.charAt(0) : day}
-            </Box>
-          ))}
-        </Box>
-        
-        {/* Calendar Grid */}
-        <Box sx={{ 
-          display: 'flex', 
-          flexWrap: 'wrap',
-          justifyContent: 'center'
-        }}>
-          {generateCalendarDays()}
-        </Box>
-        
-        {/* Legend */}
-        <Stack 
-          direction={isMobile ? 'column' : 'row'} 
-          spacing={isMobile ? 1 : 2}
-          sx={{ 
-            justifyContent: 'center',
-            alignItems: isMobile ? 'flex-start' : 'center',
-            mt: 2,
-            px: 2
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Box sx={{ 
-              width: 14, 
-              height: 14, 
-              borderRadius: '50%', 
-              backgroundColor: theme.palette.primary.main,
-              mr: 1
-            }} />
-            <Typography variant="body2">Study Day</Typography>
+              ← Previous
+            </button>
+            
+            <Typography variant="h6">
+              {format(currentMonth, 'MMMM yyyy')}
+            </Typography>
+            
+            <button
+              onClick={handleNextMonth}
+              style={{ 
+                border: 'none', 
+                background: 'none', 
+                cursor: 'pointer',
+                color: theme.palette.primary.main
+              }}
+            >
+              Next →
+            </button>
           </Box>
           
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Box sx={{ 
-              width: 14, 
-              height: 14, 
-              borderRadius: '50%', 
-              border: `2px solid ${theme.palette.primary.main}`,
-              boxSizing: 'border-box',
-              mr: 1
-            }} />
-            <Typography variant="body2">Today</Typography>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary" align="center">
+              Total study time this month: {formatTime(totalMonthStudyTime)}
+            </Typography>
           </Box>
           
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Box sx={{ 
-              width: 14, 
-              height: 14, 
-              borderRadius: '50%', 
-              backgroundColor: 'transparent',
-              border: `1px solid ${theme.palette.divider}`,
-              mr: 1
-            }} />
-            <Typography variant="body2">No Study</Typography>
-          </Box>
-        </Stack>
-      </Paper>
-    </Box>
+          <Grid container spacing={1}>
+            {/* Day names */}
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+              <Grid item xs={12/7} key={`header-${index}`}>
+                <Typography 
+                  variant="caption" 
+                  align="center" 
+                  display="block"
+                  sx={{ fontWeight: 'bold' }}
+                >
+                  {day}
+                </Typography>
+              </Grid>
+            ))}
+            
+            {/* Empty cells for days before the first of the month */}
+            {Array.from({ length: daysInMonth[0].getDay() }).map((_, index) => (
+              <Grid item xs={12/7} key={`empty-start-${index}`}>
+                <Box 
+                  sx={{ 
+                    height: 40, 
+                    borderRadius: 1,
+                    backgroundColor: 'transparent'
+                  }}
+                />
+              </Grid>
+            ))}
+            
+            {/* Calendar days */}
+            {daysInMonth.map((day, index) => {
+              const formattedDay = format(day, 'yyyy-MM-dd');
+              const isStudyDay = studyDays.includes(formattedDay);
+              const daySessions = getSessionsForDay(day);
+              const totalDayTime = daySessions.reduce((total, session) => {
+                return total + session.duration;
+              }, 0);
+              
+              return (
+                <Grid item xs={12/7} key={`day-${index}`}>
+                  <Box 
+                    sx={{ 
+                      height: 40, 
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      borderRadius: 1,
+                      backgroundColor: isStudyDay ? 
+                        `${theme.palette.primary.main}20` : 
+                        'transparent',
+                      border: '1px solid',
+                      borderColor: isStudyDay ? 
+                        theme.palette.primary.main : 
+                        'divider',
+                      position: 'relative'
+                    }}
+                  >
+                    <Typography variant="body2">
+                      {format(day, 'd')}
+                    </Typography>
+                    
+                    {totalDayTime > 0 && (
+                      <Typography 
+                        variant="caption" 
+                        sx={{ 
+                          fontSize: '0.6rem',
+                          color: theme.palette.text.secondary
+                        }}
+                      >
+                        {formatTime(totalDayTime)}
+                      </Typography>
+                    )}
+                  </Box>
+                </Grid>
+              );
+            })}
+          </Grid>
+        </>
+      )}
+      
+      {/* Streaks View */}
+      {tabValue === 1 && (
+        <Box>
+          {streaks.length > 0 ? (
+            <>
+              <Typography variant="subtitle1" gutterBottom>
+                Your Streak History
+              </Typography>
+              
+              {streaks.map((streak, index) => (
+                <Box 
+                  key={`streak-${index}`}
+                  sx={{ 
+                    mb: 2, 
+                    p: 2, 
+                    borderRadius: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    backgroundColor: index === 0 ? 
+                      `${theme.palette.secondary.main}10` : 
+                      'transparent'
+                  }}
+                >
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {streak.length} day{streak.length !== 1 ? 's' : ''}
+                  </Typography>
+                  
+                  <Typography variant="body2" color="text.secondary">
+                    {format(new Date(streak.start), 'MMM d, yyyy')} - {format(new Date(streak.end), 'MMM d, yyyy')}
+                  </Typography>
+                </Box>
+              ))}
+            </>
+          ) : (
+            <Typography variant="body1" align="center" sx={{ py: 4 }}>
+              No streak data available yet. Start checking in daily to build your streaks!
+            </Typography>
+          )}
+        </Box>
+      )}
+      
+      {/* Sessions View */}
+      {tabValue === 2 && (
+        <Box>
+          {studySessions.length > 0 ? (
+            <>
+              <Typography variant="subtitle1" gutterBottom>
+                Your Study Sessions
+              </Typography>
+              
+              {studySessions
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .map((session, index) => (
+                  <Box 
+                    key={`session-${index}`}
+                    sx={{ 
+                      mb: 2, 
+                      p: 2, 
+                      borderRadius: 2,
+                      border: '1px solid',
+                      borderColor: 'divider'
+                    }}
+                  >
+                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                      {format(new Date(session.date), 'EEEE, MMMM d, yyyy')}
+                    </Typography>
+                    
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        {format(new Date(session.startTime), 'h:mm a')} - 
+                        {session.endTime ? format(new Date(session.endTime), ' h:mm a') : ' (ongoing)'}
+                      </Typography>
+                      
+                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                        {formatTime(session.duration)}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ))}
+            </>
+          ) : (
+            <Typography variant="body1" align="center" sx={{ py: 4 }}>
+              No study sessions recorded yet. Use the timer to track your study time!
+            </Typography>
+          )}
+        </Box>
+      )}
+    </Paper>
   );
 };
 
-export default StudyHistory; 
+export default StudyHistory;
