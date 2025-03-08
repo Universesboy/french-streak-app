@@ -25,25 +25,90 @@ const STORAGE_KEY = 'french-streak-data';
 
 // Initialize streak data from localStorage or Firebase
 export const initStreakData = async (userId?: string): Promise<StreakData> => {
+  let firebaseData: StreakData | null = null;
+  let localData: StreakData | null = null;
+  
+  // Always try to get data from localStorage
+  const storedData = localStorage.getItem(STORAGE_KEY);
+  if (storedData) {
+    try {
+      localData = JSON.parse(storedData);
+    } catch (error) {
+      console.error('Error parsing localStorage data:', error);
+    }
+  }
+  
   // If user is logged in, try to get data from Firebase
   if (userId) {
     try {
       const { data, error } = await getUserStreakData(userId);
       if (data && !error) {
-        return data;
+        firebaseData = data;
+        
+        // If we have both Firebase and localStorage data, merge them
+        if (localData && firebaseData) {
+          // Use the data with the most recent lastCheckInDate
+          if (localData.lastCheckInDate && firebaseData.lastCheckInDate) {
+            const localDate = new Date(localData.lastCheckInDate);
+            const firebaseDate = new Date(firebaseData.lastCheckInDate);
+            
+            if (localDate > firebaseDate) {
+              // If local data is more recent, update Firebase with it
+              await saveUserStreakData(userId, localData);
+              return localData;
+            }
+          }
+          
+          // If local has more study days, merge them
+          if (localData.studyDays.length > firebaseData.studyDays.length) {
+            // Create a Set to remove duplicates
+            const mergedStudyDays = [...new Set([...firebaseData.studyDays, ...localData.studyDays])];
+            firebaseData.studyDays = mergedStudyDays;
+            
+            // Recalculate longest streak
+            firebaseData.longestStreak = calculateLongestStreak(mergedStudyDays);
+            firebaseData.totalDaysStudied = mergedStudyDays.length;
+            
+            // Update Firebase with merged data
+            await saveUserStreakData(userId, firebaseData);
+          }
+          
+          // If local has more study sessions, merge them
+          if (localData.studySessions.length > firebaseData.studySessions.length) {
+            // Create a map of sessions by startTime to avoid duplicates
+            const sessionMap = new Map();
+            [...firebaseData.studySessions, ...localData.studySessions].forEach(session => {
+              sessionMap.set(session.startTime, session);
+            });
+            
+            firebaseData.studySessions = Array.from(sessionMap.values());
+            
+            // Update Firebase with merged data
+            await saveUserStreakData(userId, firebaseData);
+          }
+          
+          // If local has an ongoing session and Firebase doesn't, use it
+          if (localData.ongoingSession && !firebaseData.ongoingSession) {
+            firebaseData.ongoingSession = localData.ongoingSession;
+            await saveUserStreakData(userId, firebaseData);
+          }
+        }
+        
+        if (firebaseData) {
+          return firebaseData;
+        }
       }
     } catch (error) {
       console.error('Error fetching data from Firebase:', error);
     }
   }
   
-  // Fallback to localStorage
-  const storedData = localStorage.getItem(STORAGE_KEY);
-  
-  if (storedData) {
-    return JSON.parse(storedData);
+  // Return local data if available
+  if (localData) {
+    return localData;
   }
   
+  // If no data is available, return a new empty streak data object
   return {
     currentStreak: 0,
     lastCheckInDate: null,
@@ -58,16 +123,40 @@ export const initStreakData = async (userId?: string): Promise<StreakData> => {
 
 // Save streak data to localStorage and Firebase if user is logged in
 export const saveStreakData = async (data: StreakData, userId?: string): Promise<void> => {
-  // Always save to localStorage as a backup
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  // Validate data before saving
+  if (!data) {
+    console.error('Attempted to save null or undefined streak data');
+    return;
+  }
   
-  // If user is logged in, also save to Firebase
-  if (userId) {
-    try {
-      await saveUserStreakData(userId, data);
-    } catch (error) {
-      console.error('Error saving data to Firebase:', error);
+  // Ensure data structure is complete to prevent issues
+  const completeData: StreakData = {
+    currentStreak: data.currentStreak || 0,
+    lastCheckInDate: data.lastCheckInDate || null,
+    totalReward: data.totalReward || 0,
+    studyDays: Array.isArray(data.studyDays) ? data.studyDays : [],
+    longestStreak: data.longestStreak || 0,
+    totalDaysStudied: data.totalDaysStudied || 0,
+    studySessions: Array.isArray(data.studySessions) ? data.studySessions : [],
+    ongoingSession: data.ongoingSession || null
+  };
+  
+  try {
+    // Always save to localStorage as a backup
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(completeData));
+    
+    // If user is logged in, also save to Firebase
+    if (userId) {
+      try {
+        await saveUserStreakData(userId, completeData);
+      } catch (error) {
+        console.error('Error saving data to Firebase:', error);
+        // Still allow the function to complete even if Firebase save fails
+      }
     }
+  } catch (error) {
+    console.error('Error saving streak data:', error);
+    throw error; // Re-throw to allow handling by caller
   }
 };
 
@@ -92,10 +181,22 @@ export const canCheckInToday = (lastCheckInDate: string | null): boolean => {
     return true;
   }
   
-  const today = startOfDay(new Date());
-  const lastDate = startOfDay(new Date(lastCheckInDate));
-  
-  return !isSameDay(today, lastDate);
+  try {
+    const today = startOfDay(new Date());
+    const lastDate = startOfDay(new Date(lastCheckInDate));
+    
+    // Make sure we have valid dates
+    if (!isValid(today) || !isValid(lastDate)) {
+      console.error('Invalid date in canCheckInToday:', { today, lastDate, lastCheckInDate });
+      return false;
+    }
+    
+    return !isSameDay(today, lastDate);
+  } catch (error) {
+    console.error('Error in canCheckInToday:', error);
+    // If there's an error, prevent check-in to be safe
+    return false;
+  }
 };
 
 // Get formatted date string
@@ -346,7 +447,7 @@ export const updateStreakAfterCheckIn = (data: StreakData): StreakData => {
   const today = new Date();
   const formattedToday = getFormattedDate(today);
   
-  // Check if already checked in today
+  // Check if already checked in today - if so, return unchanged data
   if (data.lastCheckInDate && isSameDay(today, new Date(data.lastCheckInDate))) {
     return data;
   }

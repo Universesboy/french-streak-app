@@ -30,6 +30,7 @@ import Login from './components/Login';
 import Register from './components/Register';
 import UserProfile from './components/UserProfile';
 import { AuthProvider, useAuth } from './utils/AuthContext';
+import { logoutUser } from './utils/firebase';
 import { 
   initStreakData, 
   saveStreakData, 
@@ -449,24 +450,61 @@ function AppContent(): JSX.Element {
     }
   };
   
-  // Handle authentication success
-  const handleAuthSuccess = () => {
-    setAuthView(null);
-    setNotification({
-      open: true,
-      message: currentUser ? 'Welcome back!' : 'Registration successful! You are now logged in.',
-      severity: 'success'
-    });
+  // Handle successful authentication
+  const handleAuthSuccess = async () => {
+    setAuthView(null); // Close auth view
+    
+    try {
+      // Get fresh data after login
+      const data = await initStreakData(currentUser?.uid);
+      setStreakData(data);
+      
+      // Show success notification
+      setNotification({
+        open: true,
+        message: 'Login successful! Your progress has been loaded.',
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error loading data after login:', error);
+      setNotification({
+        open: true,
+        message: 'Logged in, but there was an issue loading your data.',
+        severity: 'warning'
+      });
+    }
   };
   
   // Handle logout
-  const handleLogout = () => {
-    setTabValue(0); // Reset to main tab
-    setNotification({
-      open: true,
-      message: 'You have been logged out.',
-      severity: 'info'
-    });
+  const handleLogout = async () => {
+    try {
+      // Ensure current data is saved before logout
+      if (streakData.ongoingSession) {
+        // If there's an active session, end it before logout
+        const updatedData = endStudySession(streakData);
+        await saveStreakData(updatedData, currentUser?.uid);
+      } else {
+        // Otherwise just save the current data
+        await saveStreakData(streakData, currentUser?.uid);
+      }
+      
+      // Perform logout
+      await logoutUser();
+      
+      setTabValue(0); // Reset to main tab
+      setNotification({
+        open: true,
+        message: 'Your progress has been saved and you have been logged out.',
+        severity: 'info'
+      });
+    } catch (error) {
+      console.error('Error during logout:', error);
+      setNotification({
+        open: true,
+        message: 'There was a problem logging out. Please try again.',
+        severity: 'error'
+      });
+    }
   };
   
   // If showing auth view, render login or register

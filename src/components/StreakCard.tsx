@@ -246,7 +246,7 @@ const StreakCard: React.FC<StreakCardProps> = ({
                           color: theme.palette.text.primary
                         }}
                       >
-                        {stat.prefix}{stat.value.toLocaleString()}
+                        {stat.prefix}{stat.value !== undefined ? stat.value.toLocaleString() : '0'}
                       </Typography>
                       
                       {stat.suffix && (
