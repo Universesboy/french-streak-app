@@ -25,10 +25,10 @@ interface StreakCardProps {
 }
 
 const StreakCard: React.FC<StreakCardProps> = ({ 
-  currentStreak, 
-  longestStreak, 
-  totalDaysStudied, 
-  totalReward 
+  currentStreak = 0, 
+  longestStreak = 0, 
+  totalDaysStudied = 0, 
+  totalReward = 0 
 }) => {
   const theme = useTheme();
   

@@ -232,6 +232,13 @@ const theme = createTheme({
   },
 });
 
+// Before the AppContent function, add this interface
+interface Notification {
+  open: boolean;
+  message: string;
+  severity: 'success' | 'error' | 'warning' | 'info';
+}
+
 // Main App component wrapped with AuthProvider
 const AppWithAuth = () => {
   return (
@@ -265,17 +272,20 @@ function AppContent(): JSX.Element {
   });
   
   // State for notification
-  const [notification, setNotification] = useState({
+  const [notification, setNotification] = useState<Notification>({
     open: false,
     message: '',
-    severity: 'success' as 'success' | 'error' | 'warning' | 'info'
+    severity: 'info'
   });
 
   // State for tab selection
   const [tabValue, setTabValue] = useState(0);
   
   // Check for mobile view
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery('(max-width:600px)');
+
+  // State for loading
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
 
   // Initialize data from localStorage or Firebase on component mount or user change
   useEffect(() => {
@@ -322,33 +332,50 @@ function AppContent(): JSX.Element {
 
   // Handle daily check-in
   const handleCheckIn = async () => {
-    console.log('Starting timer...');
+    // Prevent multiple clicks
+    if (isCheckingIn) return;
+    
+    // Double-check if user can check in today before processing
+    if (!canCheckInToday(streakData.lastCheckInDate)) {
+      setNotification({
+        open: true,
+        message: 'You already checked in today. Come back tomorrow!',
+        severity: 'info'
+      });
+      return;
+    }
+    
+    setIsCheckingIn(true);
+    console.log('Starting check-in process...');
+    
     try {
-      // Check if user can check in today
-      if (canCheckInToday(streakData.lastCheckInDate)) {
-        // Update streak data
-        const updatedData = updateStreakAfterCheckIn(streakData);
-        
-        // Save to state and storage
-        setStreakData(updatedData);
-        await saveStreakData(updatedData, currentUser?.uid);
-        
-        // Show success notification
-        setNotification({
-          open: true,
-          message: updatedData.currentStreak > 1 
-            ? `Great job! Your streak is now ${updatedData.currentStreak} days!` 
-            : 'Great start! Keep learning tomorrow to build your streak!',
-          severity: 'success'
-        });
-      } else {
-        // Show error notification if already checked in
+      // Update streak data
+      const updatedData = updateStreakAfterCheckIn(streakData);
+      
+      // Verify the update actually changed the lastCheckInDate (extra safety check)
+      if (updatedData.lastCheckInDate === streakData.lastCheckInDate) {
+        console.log('Check-in had no effect, possible duplicate');
         setNotification({
           open: true,
           message: 'You already checked in today. Come back tomorrow!',
           severity: 'info'
         });
+        setIsCheckingIn(false);
+        return;
       }
+      
+      // Save to state and storage
+      setStreakData(updatedData);
+      await saveStreakData(updatedData, currentUser?.uid);
+      
+      // Show success notification
+      setNotification({
+        open: true,
+        message: updatedData.currentStreak > 1 
+          ? `Great job! Your streak is now ${updatedData.currentStreak} days!` 
+          : 'Great start! Keep learning tomorrow to build your streak!',
+        severity: 'success'
+      });
     } catch (error) {
       console.error('Error checking in:', error);
       setNotification({
@@ -356,6 +383,8 @@ function AppContent(): JSX.Element {
         message: 'Failed to check in. Please try again.',
         severity: 'error'
       });
+    } finally {
+      setIsCheckingIn(false);
     }
   };
   
@@ -643,7 +672,7 @@ function AppContent(): JSX.Element {
               <Box sx={{ mt: 3 }}>
                 <CheckInButton 
                   onCheckIn={handleCheckIn}
-                  disabled={!canCheckInToday(streakData.lastCheckInDate)}
+                  disabled={!canCheckInToday(streakData.lastCheckInDate) || isCheckingIn}
                   lastCheckIn={streakData.lastCheckInDate}
                 />
               </Box>

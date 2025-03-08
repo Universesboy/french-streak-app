@@ -177,20 +177,30 @@ export const calculateTotalReward = (streak: number): number => {
 
 // Check if the user can check in today
 export const canCheckInToday = (lastCheckInDate: string | null): boolean => {
+  // If no previous check-in, they can check in
   if (!lastCheckInDate) {
     return true;
   }
   
   try {
     const today = startOfDay(new Date());
+    const formattedToday = getFormattedDate(today);
+    
+    // First, check exact date string match (simplest case)
+    if (lastCheckInDate === formattedToday) {
+      return false;
+    }
+    
+    // Then do a more thorough date object comparison
     const lastDate = startOfDay(new Date(lastCheckInDate));
     
     // Make sure we have valid dates
     if (!isValid(today) || !isValid(lastDate)) {
       console.error('Invalid date in canCheckInToday:', { today, lastDate, lastCheckInDate });
-      return false;
+      return false; // If dates are invalid, don't allow check-in to be safe
     }
     
+    // Return true only if the days are different
     return !isSameDay(today, lastDate);
   } catch (error) {
     console.error('Error in canCheckInToday:', error);
@@ -447,8 +457,37 @@ export const updateStreakAfterCheckIn = (data: StreakData): StreakData => {
   const today = new Date();
   const formattedToday = getFormattedDate(today);
   
-  // Check if already checked in today - if so, return unchanged data
-  if (data.lastCheckInDate && isSameDay(today, new Date(data.lastCheckInDate))) {
+  // STRICT CHECK: If already checked in today, return unchanged data
+  if (data.lastCheckInDate) {
+    try {
+      const lastCheckInDate = new Date(data.lastCheckInDate);
+      
+      // Ensure date is valid
+      if (!isValid(lastCheckInDate)) {
+        console.error('Invalid lastCheckInDate:', data.lastCheckInDate);
+      } else if (isSameDay(today, lastCheckInDate)) {
+        console.log('Already checked in today, returning unchanged data');
+        return data;
+      }
+    } catch (error) {
+      console.error('Error comparing dates in updateStreakAfterCheckIn:', error);
+      // If there's an error processing dates, be safe and return unchanged data
+      return data;
+    }
+  }
+  
+  // Also check if today is already in studyDays to prevent duplicates
+  if (data.studyDays.includes(formattedToday)) {
+    console.log('Today already in studyDays, possible duplicate check-in');
+    
+    // Update the lastCheckInDate if it's not set correctly but keep other data the same
+    if (data.lastCheckInDate !== formattedToday) {
+      return {
+        ...data,
+        lastCheckInDate: formattedToday
+      };
+    }
+    
     return data;
   }
   
