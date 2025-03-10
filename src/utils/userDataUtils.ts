@@ -1,6 +1,6 @@
 import { db } from './firebase';
 import { doc, updateDoc, getDoc, collection, query, getDocs, writeBatch, where } from 'firebase/firestore';
-import { StreakData } from './streakUtils';
+import { StreakData, saveStreakData } from './streakUtils';
 
 /**
  * Updates a specific user's data directly in Firebase
@@ -15,15 +15,17 @@ export const updateUserDataDirectly = async (userId: string, newData: Partial<St
       return { success: false, error: "User not found" };
     }
     
-    // Create update object with only the fields that need to be updated
-    const updateObj: Record<string, any> = {};
+    const userData = docSnap.data();
+    const currentStreakData = userData.streakData as StreakData;
     
-    Object.entries(newData).forEach(([key, value]) => {
-      updateObj[`streakData.${key}`] = value;
-    });
+    // Create updated data by merging current and new data
+    const updatedData = {
+      ...currentStreakData,
+      ...newData
+    };
     
-    // Update the document
-    await updateDoc(userDocRef, updateObj);
+    // Update both Firebase and localStorage
+    await saveStreakData(updatedData, userId);
     
     return { success: true };
   } catch (error) {
@@ -39,33 +41,41 @@ export const batchUpdateUsers = async (
   updateCriteria: (data: any) => boolean, 
   updateFunction: (data: StreakData) => Partial<StreakData>
 ) => {
-  const batch = writeBatch(db);
-  const usersRef = collection(db, "users");
-  const usersSnapshot = await getDocs(query(usersRef));
-  
-  let count = 0;
-  
-  usersSnapshot.forEach((userDoc) => {
-    const userData = userDoc.data();
+  try {
+    const usersRef = collection(db, "users");
+    const usersSnapshot = await getDocs(query(usersRef));
     
-    // Only update if criteria is met
-    if (updateCriteria(userData)) {
-      const updatedFields = updateFunction(userData.streakData);
+    let count = 0;
+    
+    // Process each user one by one (no batch) so we can use saveStreakData
+    for (const userDoc of usersSnapshot.docs) {
+      const userData = userDoc.data();
       
-      // Create update object with only the fields that need to be updated
-      const updateObj: Record<string, any> = {};
-      
-      Object.entries(updatedFields).forEach(([key, value]) => {
-        updateObj[`streakData.${key}`] = value;
-      });
-      
-      batch.update(doc(db, "users", userDoc.id), updateObj);
-      count++;
+      // Only update if criteria is met
+      if (updateCriteria(userData)) {
+        try {
+          const updatedFields = updateFunction(userData.streakData);
+          
+          // Create complete updated data
+          const updatedData = {
+            ...userData.streakData,
+            ...updatedFields
+          };
+          
+          // Update both Firebase and localStorage
+          await saveStreakData(updatedData, userDoc.id);
+          count++;
+        } catch (e) {
+          console.error(`Error updating user ${userDoc.id}:`, e);
+        }
+      }
     }
-  });
-  
-  await batch.commit();
-  return { updatedCount: count };
+    
+    return { updatedCount: count };
+  } catch (error) {
+    console.error('Error in batch update:', error);
+    return { success: false, error };
+  }
 };
 
 /**
@@ -110,10 +120,8 @@ export const fixUserDataIssues = async (userId: string) => {
       }
     }
     
-    // Update the document
-    await updateDoc(userDocRef, {
-      streakData: fixedData
-    });
+    // Update both Firebase and localStorage
+    await saveStreakData(fixedData, userId);
     
     return { success: true, fixedData };
   } catch (error) {
@@ -232,10 +240,8 @@ export const importUserData = async (userId: string, jsonData: string) => {
       };
     }
     
-    // Update the document
-    await updateDoc(userDocRef, {
-      streakData: parsedData
-    });
+    // Update both Firebase and localStorage using saveStreakData
+    await saveStreakData(parsedData, userId);
     
     return { success: true };
   } catch (error) {

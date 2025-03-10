@@ -468,16 +468,20 @@ function AppContent(): JSX.Element {
   
   // Handle tab change
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    if (Number.isInteger(newValue) && newValue >= 0 && newValue <= 3) {
-      setTabValue(newValue);
+    // Every time user changes tabs, refresh the data
+    if (newValue !== tabValue) {
+      loadData();
     }
+    setTabValue(newValue);
   };
   
   // Handle bottom navigation change
   const handleBottomNavChange = (event: React.SyntheticEvent, newValue: number) => {
-    if (Number.isInteger(newValue) && newValue >= 0 && newValue <= 3) {
-      setTabValue(newValue);
+    // Every time user changes tabs in mobile view, refresh the data
+    if (newValue !== tabValue) {
+      loadData();
     }
+    setTabValue(newValue);
   };
   
   // Handle successful authentication
