@@ -289,46 +289,47 @@ function AppContent(): JSX.Element {
 
   // Initialize data from localStorage or Firebase on component mount or user change
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        // Initialize with default empty values
-        const initialData: StreakData = {
-          currentStreak: 0,
-          lastCheckInDate: null,
-          totalReward: 0,
-          studyDays: [],
-          longestStreak: 0,
-          totalDaysStudied: 0,
-          studySessions: [],
-          ongoingSession: null
-        };
-        
-        // Try to load data from Firebase or localStorage
-        const data = await initStreakData(currentUser?.uid);
-        
-        // Make sure we're not setting undefined or null values
-        setStreakData(data || initialData);
-        
-        // Check if there's an active session
-        if (data?.ongoingSession) {
-          setNotification({
-            open: true,
-            message: 'You have an active study session in progress.',
-            severity: 'info'
-          });
-        }
-      } catch (error) {
-        console.error('Error loading streak data:', error);
-        setNotification({
-          open: true,
-          message: 'Failed to load your data. Please try again.',
-          severity: 'error'
-        });
-      }
-    };
-    
     loadData();
   }, [currentUser]);
+  
+  // Function to load user data
+  const loadData = async () => {
+    try {
+      // Initialize with default empty values
+      const initialData: StreakData = {
+        currentStreak: 0,
+        lastCheckInDate: null,
+        totalReward: 0,
+        studyDays: [],
+        longestStreak: 0,
+        totalDaysStudied: 0,
+        studySessions: [],
+        ongoingSession: null
+      };
+      
+      // Try to load data from Firebase or localStorage
+      const data = await initStreakData(currentUser?.uid);
+      
+      // Make sure we're not setting undefined or null values
+      setStreakData(data || initialData);
+      
+      // Check if there's an active session
+      if (data?.ongoingSession) {
+        setNotification({
+          open: true,
+          message: 'You have an active study session in progress.',
+          severity: 'info'
+        });
+      }
+    } catch (error) {
+      console.error('Error loading streak data:', error);
+      setNotification({
+        open: true,
+        message: 'Failed to load your data. Please try again.',
+        severity: 'error'
+      });
+    }
+  };
 
   // Handle daily check-in
   const handleCheckIn = async () => {
@@ -708,7 +709,10 @@ function AppContent(): JSX.Element {
           
           {tabValue === 3 && currentUser && (
             <Box>
-              <UserProfile onLogout={handleLogout} />
+              <UserProfile 
+                onLogout={handleLogout} 
+                onDataUpdate={loadData}
+              />
             </Box>
           )}
         </motion.div>

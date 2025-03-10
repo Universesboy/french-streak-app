@@ -16,12 +16,32 @@ import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import { motion } from 'framer-motion';
+import { saveStreakData, initStreakData } from '../utils/streakUtils';
+import { useAuth } from '../utils/AuthContext';
 
 interface StreakCardProps {
   currentStreak: number;
   longestStreak: number;
   totalDaysStudied: number;
   totalReward: number;
+}
+
+interface StudySession {
+  startTime: string; // ISO string
+  endTime: string | null; // ISO string, null if session is ongoing
+  duration: number; // in seconds
+  date: string; // YYYY-MM-DD format
+}
+
+interface StreakData {
+  currentStreak: number;
+  lastCheckInDate: string | null;
+  totalReward: number;
+  studyDays: string[];
+  longestStreak: number;
+  totalDaysStudied: number;
+  studySessions: StudySession[];
+  ongoingSession: StudySession | null;
 }
 
 const StreakCard: React.FC<StreakCardProps> = ({ 
@@ -31,6 +51,7 @@ const StreakCard: React.FC<StreakCardProps> = ({
   totalReward = 0 
 }) => {
   const theme = useTheme();
+  const { currentUser } = useAuth();
   
   // Calculate progress percentage
   const progressPercentage = longestStreak > 0 
@@ -110,6 +131,22 @@ const StreakCard: React.FC<StreakCardProps> = ({
       description: 'Total rewards earned from your study streaks'
     }
   ];
+  
+  const handleUpdate = async () => {
+    // Get the current data first
+    const currentData = await initStreakData(currentUser?.uid);
+
+    // Update the data
+    const updatedData = {
+      ...currentData,
+      // Make your changes here
+      currentStreak: 5, // Example update
+      totalReward: 100, // Example update
+    };
+
+    // Save the updated data
+    await saveStreakData(updatedData, currentUser?.uid);
+  };
   
   return (
     <motion.div
